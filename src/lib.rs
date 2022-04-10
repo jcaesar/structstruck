@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod test;
+
 use convert_case::Case;
 use convert_case::Casing;
 use proc_macro2::Delimiter;
@@ -17,11 +20,15 @@ use venial::{parse_declaration, Declaration};
 #[proc_macro]
 pub fn strike(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut ret = Default::default();
-    rsp(item.into(), vec![], &mut ret);
+    recurse_through_definition(item.into(), vec![], &mut ret);
     ret.into()
 }
 
-fn rsp(quot: TokenStream, mut strike_attrs: Vec<Attribute>, ret: &mut TokenStream) {
+fn recurse_through_definition(
+    quot: TokenStream,
+    mut strike_attrs: Vec<Attribute>,
+    ret: &mut TokenStream,
+) {
     let mut quot = parse_declaration(quot);
     match &mut quot {
         Declaration::Struct(s) => {
@@ -40,7 +47,8 @@ fn rsp(quot: TokenStream, mut strike_attrs: Vec<Attribute>, ret: &mut TokenStrea
             match &mut s.fields {
                 venial::StructFields::Named(n) => {
                     let fields = n.fields.iter().cloned().map(|(mut field, punct)| {
-                        let ttok = search_struct(&field.ty.tokens[..], &strike_attrs, ret, &field);
+                        let ttok =
+                            recurse_through_type(&field.ty.tokens[..], &strike_attrs, ret, &field);
                         field.ty.tokens = ttok;
                         (field, punct)
                     });
@@ -62,7 +70,7 @@ fn rsp(quot: TokenStream, mut strike_attrs: Vec<Attribute>, ret: &mut TokenStrea
     quot.to_tokens(ret);
 }
 
-fn search_struct(
+fn recurse_through_type(
     tok: &[TokenTree],
     strike_attrs: &Vec<Attribute>,
     ret: &mut TokenStream,
@@ -74,7 +82,7 @@ fn search_struct(
             if kw == "struct" =>
         {
             let name = name.clone();
-            rsp(tt.iter().cloned().collect(), strike_attrs.clone(), ret);
+            recurse_through_definition(tt.iter().cloned().collect(), strike_attrs.clone(), ret);
             vec![name]
         }
         // Unnamed substruct
@@ -82,7 +90,7 @@ fn search_struct(
             let name = field.name.to_string().to_case(Case::Pascal);
             let name = Ident::new(&name, field.name.span());
             let head = head.into_iter().cloned().collect::<TokenStream>();
-            rsp(quote! {#head #kw #name #body}, strike_attrs.clone(), ret);
+            recurse_through_definition(quote! {#head #kw #name #body}, strike_attrs.clone(), ret);
             vec![TokenTree::Ident(name)]
         }
         // Curse into generics
@@ -94,7 +102,7 @@ fn search_struct(
                     TokenTree::Punct(comma) if comma.as_char() == ',' => true,
                     _ => false,
                 })
-                .map(|sub| search_struct(sub, strike_attrs, ret, field));
+                .map(|sub| recurse_through_type(sub, strike_attrs, ret, field));
             [
                 &[typ.clone(), TokenTree::Punct(open.clone())][..],
                 &subs.collect::<Vec<_>>()[..]
@@ -104,111 +112,5 @@ fn search_struct(
             .concat()
         }
         _ => tok.into(),
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use quote::quote;
-
-    #[test]
-    fn strikethrough_derive() {
-        let from = quote! {
-            #[strikethrough[derive(Debug, Default, PartialEq)]]
-            struct Parent {
-                a: struct {
-                    b: struct Shared { d: i32 },
-                    c: Shared,
-                },
-                e: u32,
-            }
-        };
-        let mut to = TokenStream::new();
-        let out = quote! {
-            #[derive(Debug, Default, PartialEq)]
-            struct Shared {
-                d: i32,
-            }
-            #[derive(Debug, Default, PartialEq)]
-            struct A {
-                b: Shared,
-                c: Shared,
-            }
-            #[derive(Debug, Default, PartialEq)]
-            struct Parent {
-                a: A,
-                e: u32,
-            }
-        };
-        rsp(from, vec![], &mut to);
-        // No Eq implementations. :/
-        assert_eq!(to.to_string(), out.to_string());
-    }
-
-    #[test]
-    fn explicit_pub() {
-        let from = quote! {
-            struct Parent {
-                a: pub struct {
-                    c: u32,
-                },
-                b: pub(crate) struct {
-                    d: u64,
-                },
-            }
-        };
-        let mut to = TokenStream::new();
-        let out = quote! {
-            pub struct A {
-                c: u32,
-            }
-            pub(crate) struct B {
-                d: u64,
-            }
-            struct Parent {
-                a: A,
-                b: B,
-            }
-        };
-        rsp(from, vec![], &mut to);
-        assert_eq!(to.to_string(), out.to_string());
-    }
-
-    #[test]
-    fn in_generics() {
-        let from = quote! {
-            struct Parent {
-                a: Option<struct {
-                    c: u32,
-                }>,
-                b: Result<
-                    struct Then {
-                        d: u64,
-                    },
-                    struct Else {
-                        e: u128,
-                    },
-                >
-            }
-        };
-        let mut to = TokenStream::new();
-        let out = quote! {
-            struct A {
-                c: u32,
-            }
-            struct Then {
-                d: u64,
-            }
-            struct Else {
-                e: u128,
-            }
-            struct Parent {
-                a: Option<A>,
-                b: Result<Then, Else, >,
-            }
-        };
-        rsp(from, vec![], &mut to);
-        assert_eq!(to.to_string(), out.to_string());
     }
 }
