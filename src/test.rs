@@ -1,5 +1,5 @@
 use crate::imp::recurse_through_definition;
-use proc_macro2::TokenStream;
+use proc_macro2::{TokenStream, TokenTree};
 use quote::quote;
 
 #[test]
@@ -96,6 +96,48 @@ fn in_generics() {
         struct Parent {
             a: Option<A>,
             b: Result<Then, Else, >,
+        }
+    };
+    recurse_through_definition(from, vec![], &mut to);
+    assert_eq!(to.to_string(), out.to_string());
+}
+
+#[test]
+fn unsupported_union() {
+    let from = quote! {
+        union Foo { }
+    };
+    let mut to = TokenStream::new();
+    recurse_through_definition(from, vec![], &mut to);
+    assert!(to.clone().into_iter().any(|tok| match tok {
+        TokenTree::Ident(id) => id == "compile_error",
+        _ => false,
+    }));
+    //assert!(to.clone().into_iter().any(|tok| match tok {
+    //    TokenTree::Literal(lit) => lit.to_string().contains("unsupported"),
+    //    _ => false,
+    //}));
+}
+
+#[test]
+fn enum_named() {
+    let from = quote! {
+        enum Parent {
+            A {
+                a: enum { Foo { b: i8 } },
+                c: i16
+            }
+            B {}
+        }
+    };
+    let mut to = TokenStream::new();
+    let out = quote! {
+        enum A {
+            Foo { b: i8 , },
+        }
+        enum Parent {
+            A { a: A, c: i16, },
+            B {},
         }
     };
     recurse_through_definition(from, vec![], &mut to);
