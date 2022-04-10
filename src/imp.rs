@@ -70,6 +70,13 @@ pub(crate) fn recurse_through_definition(
             );
         }
     }
+    if let Declaration::Struct(s) = &mut parsed {
+        if let StructFields::Tuple(_) = s.fields {
+            if s._semicolon.is_none() {
+                s._semicolon = Some(Punct::new(';', Spacing::Alone))
+            }
+        }
+    }
     parsed.to_tokens(ret);
 }
 

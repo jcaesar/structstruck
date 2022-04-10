@@ -2,6 +2,13 @@ use crate::imp::recurse_through_definition;
 use proc_macro2::{TokenStream, TokenTree};
 use quote::quote;
 
+fn check(plain: proc_macro2::TokenStream, nested: proc_macro2::TokenStream) {
+    let mut to = proc_macro2::TokenStream::new();
+    recurse_through_definition(plain, vec![], &mut to);
+    // No Eq implementations. :/
+    assert_eq!(to.to_string(), nested.to_string());
+}
+
 #[test]
 fn strikethrough_derive() {
     let from = quote! {
@@ -15,7 +22,6 @@ fn strikethrough_derive() {
             e: u32,
         }
     };
-    let mut to = TokenStream::new();
     let out = quote! {
         #[derive(Debug, Default, PartialEq)]
         struct Shared {
@@ -34,9 +40,7 @@ fn strikethrough_derive() {
             e: u32,
         }
     };
-    recurse_through_definition(from, vec![], &mut to);
-    // No Eq implementations. :/
-    assert_eq!(to.to_string(), out.to_string());
+    check(from, out);
 }
 
 #[test]
@@ -51,7 +55,6 @@ fn explicit_pub() {
             },
         }
     };
-    let mut to = TokenStream::new();
     let out = quote! {
         pub struct A {
             c: u32,
@@ -64,8 +67,7 @@ fn explicit_pub() {
             b: B,
         }
     };
-    recurse_through_definition(from, vec![], &mut to);
-    assert_eq!(to.to_string(), out.to_string());
+    check(from, out);
 }
 
 #[test]
@@ -85,7 +87,6 @@ fn in_generics() {
             >
         }
     };
-    let mut to = TokenStream::new();
     let out = quote! {
         struct A {
             c: u32,
@@ -101,8 +102,7 @@ fn in_generics() {
             b: Result<Then, Else, >,
         }
     };
-    recurse_through_definition(from, vec![], &mut to);
-    assert_eq!(to.to_string(), out.to_string());
+    check(from, out);
 }
 
 #[test]
@@ -133,7 +133,6 @@ fn enum_named() {
             B {}
         }
     };
-    let mut to = TokenStream::new();
     let out = quote! {
         enum A {
             Foo { b: i8, },
@@ -143,8 +142,7 @@ fn enum_named() {
             B {},
         }
     };
-    recurse_through_definition(from, vec![], &mut to);
-    assert_eq!(to.to_string(), out.to_string());
+    check(from, out);
 }
 
 #[test]
@@ -156,15 +154,37 @@ fn tupledec() {
             c: enum { Foo(struct(i32))}
         }
     };
-    let mut to = TokenStream::new();
     let out = quote! {
-        struct A (i16, )
+        struct A (i16, );
         struct Bar { bar: i64,  }
-        struct B (Bar ,)
-        struct Foo (i32 ,)
+        struct B (Bar ,);
+        struct Foo (i32 ,);
         enum C { Foo (Foo ,) , }
         struct Parent { a : A , b : B , c : C , }
     };
-    recurse_through_definition(from, vec![], &mut to);
-    assert_eq!(to.to_string(), out.to_string());
+    check(from, out);
+}
+
+#[test]
+fn tuples_need_semicolon() {
+    let from = quote! {
+        struct Outer {
+            enum_demo: enum {
+                NamedVariant {
+                    tuple_struct: struct (usize)
+                }
+                TupleVariant(struct (isize))
+            }
+        }
+    };
+    let out = quote! {
+        struct TupleStruct (usize ,);
+        struct TupleVariant (isize ,);
+        enum EnumDemo {
+            NamedVariant { tuple_struct : TupleStruct , } ,
+            TupleVariant (TupleVariant ,) ,
+        }
+        struct Outer { enum_demo : EnumDemo , }
+    };
+    check(from, out);
 }
