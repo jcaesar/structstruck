@@ -1,4 +1,5 @@
-use super::*;
+use crate::imp::recurse_through_definition;
+use proc_macro2::TokenStream;
 use quote::quote;
 
 #[test]
