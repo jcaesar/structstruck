@@ -6,8 +6,9 @@ use quote::quote;
 fn strikethrough_derive() {
     let from = quote! {
         #[strikethrough[derive(Debug, Default, PartialEq)]]
+        #[gubbel]
         struct Parent {
-            a: struct {
+            a: #[gobbel] struct {
                 b: struct Shared { d: i32 },
                 c: Shared,
             },
@@ -20,11 +21,13 @@ fn strikethrough_derive() {
         struct Shared {
             d: i32,
         }
+        #[gobbel]
         #[derive(Debug, Default, PartialEq)]
         struct A {
             b: Shared,
             c: Shared,
         }
+        #[gubbel]
         #[derive(Debug, Default, PartialEq)]
         struct Parent {
             a: A,
@@ -133,12 +136,34 @@ fn enum_named() {
     let mut to = TokenStream::new();
     let out = quote! {
         enum A {
-            Foo { b: i8 , },
+            Foo { b: i8, },
         }
         enum Parent {
             A { a: A, c: i16, },
             B {},
         }
+    };
+    recurse_through_definition(from, vec![], &mut to);
+    assert_eq!(to.to_string(), out.to_string());
+}
+
+#[test]
+fn tupledec() {
+    let from = quote! {
+        struct Parent {
+            a: struct (i16),
+            b: struct (struct Bar { bar: i64 }),
+            c: enum { Foo(struct(i32))}
+        }
+    };
+    let mut to = TokenStream::new();
+    let out = quote! {
+        struct A (i16, )
+        struct Bar { bar: i64,  }
+        struct B (Bar ,)
+        struct Foo (i32 ,)
+        enum C { Foo (Foo ,) , }
+        struct Parent { a : A , b : B , c : C , }
     };
     recurse_through_definition(from, vec![], &mut to);
     assert_eq!(to.to_string(), out.to_string());

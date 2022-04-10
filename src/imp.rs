@@ -14,11 +14,13 @@ use venial::Attribute;
 use venial::EnumVariant;
 use venial::NamedField;
 use venial::Punctuated;
+use venial::StructFields;
+use venial::TupleField;
 use venial::{parse_declaration, Declaration};
 
-fn stream_span(input: &TokenStream) -> Option<Span> {
+fn stream_span(input: impl Iterator<Item = TokenTree>) -> Option<Span> {
     let mut ret = None;
-    for tok in input.clone().into_iter() {
+    for tok in input {
         match ret {
             None => ret = Some(tok.span()),
             Some(span) => match span.join(tok.span()) {
@@ -35,17 +37,22 @@ pub(crate) fn recurse_through_definition(
     mut strike_attrs: Vec<Attribute>,
     ret: &mut TokenStream,
 ) {
-    let span = stream_span(&input);
+    let span = stream_span(input.clone().into_iter());
     let mut parsed = parse_declaration(input);
     match &mut parsed {
         Declaration::Struct(s) => {
             strike_through_attributes(&mut s.attributes, &mut strike_attrs);
-            recurse_through_struct_fields(&mut s.fields, &strike_attrs, ret);
+            recurse_through_struct_fields(&mut s.fields, &strike_attrs, ret, &None);
         }
         Declaration::Enum(e) => {
             strike_through_attributes(&mut e.attributes, &mut strike_attrs);
             let vs = e.variants.iter().cloned().map(|(mut v, p)| {
-                recurse_through_struct_fields(&mut v.contents, &strike_attrs, ret);
+                recurse_through_struct_fields(
+                    &mut v.contents,
+                    &strike_attrs,
+                    ret,
+                    &Some(v.name.clone()),
+                );
                 (v, p)
             });
             let mut new_variants: Punctuated<EnumVariant> = Default::default();
@@ -70,11 +77,19 @@ fn recurse_through_struct_fields(
     fields: &mut venial::StructFields,
     strike_attrs: &Vec<Attribute>,
     ret: &mut TokenStream,
+    name_hint: &Option<Ident>,
 ) {
     match fields {
-        venial::StructFields::Named(n) => {
+        StructFields::Named(n) => {
             let fields = n.fields.iter().cloned().map(|(mut field, punct)| {
-                let ttok = recurse_through_type(&field.ty.tokens[..], &strike_attrs, ret, &field);
+                let name_hint = field.name.to_string().to_case(Case::Pascal);
+                let name_hint = Ident::new(&name_hint, field.name.span());
+                let ttok = recurse_through_type(
+                    &field.ty.tokens[..],
+                    &strike_attrs,
+                    ret,
+                    &Some(name_hint),
+                );
                 field.ty.tokens = ttok;
                 (field, punct)
             });
@@ -85,7 +100,21 @@ fn recurse_through_struct_fields(
             n.fields = new_fields;
             n.update_tokens();
         }
-        _ => unreachable!(),
+        StructFields::Unit => (),
+        StructFields::Tuple(t) => {
+            let fields = t.fields.iter().cloned().map(|(mut field, punct)| {
+                let ttok =
+                    recurse_through_type(&field.ty.tokens[..], &strike_attrs, ret, name_hint);
+                field.ty.tokens = ttok;
+                (field, punct)
+            });
+            let mut new_fields: Punctuated<TupleField> = Default::default();
+            for (field, punct) in fields {
+                new_fields.push(field, Some(punct));
+            }
+            t.fields = new_fields;
+            t.update_tokens();
+        }
     }
 }
 
@@ -108,25 +137,33 @@ fn recurse_through_type(
     tok: &[TokenTree],
     strike_attrs: &Vec<Attribute>,
     ret: &mut TokenStream,
-    field: &NamedField,
+    name_hint: &Option<Ident>,
 ) -> Vec<TokenTree> {
     match tok {
         // Named substruct
         tt @ [.., TokenTree::Ident(kw), name @ TokenTree::Ident(_), TokenTree::Group(_)]
-            if kw == "struct" || kw == "enum" =>
+            if is_decl_kw(kw) =>
         {
             let name = name.clone();
             recurse_through_definition(tt.iter().cloned().collect(), strike_attrs.clone(), ret);
             vec![name]
         }
         // Unnamed substruct
-        [head @ .., TokenTree::Ident(kw), body @ TokenTree::Group(_)]
-            if kw == "struct" || kw == "enum" =>
-        {
-            let name = field.name.to_string().to_case(Case::Pascal);
-            let name = Ident::new(&name, field.name.span());
+        [head @ .., TokenTree::Ident(kw), body @ TokenTree::Group(_)] if is_decl_kw(kw) => {
+            let name = match name_hint {
+                Some(name) => name.clone(),
+                None => {
+                    report_error(
+                        stream_span(tok.iter().cloned()),
+                        ret,
+                        "No context for naming substructure",
+                    );
+                    return vec![TokenTree::Punct(Punct::new('!', Spacing::Alone))];
+                }
+            };
             let head = head.into_iter().cloned().collect::<TokenStream>();
-            recurse_through_definition(quote! {#head #kw #name #body}, strike_attrs.clone(), ret);
+            let newthing = quote! {#head #kw #name #body};
+            recurse_through_definition(newthing, strike_attrs.clone(), ret);
             vec![TokenTree::Ident(name)]
         }
         // Curse into generics
@@ -138,7 +175,7 @@ fn recurse_through_type(
                     TokenTree::Punct(comma) if comma.as_char() == ',' => true,
                     _ => false,
                 })
-                .map(|sub| recurse_through_type(sub, strike_attrs, ret, field));
+                .map(|sub| recurse_through_type(sub, strike_attrs, ret, name_hint));
             [
                 &[typ.clone(), TokenTree::Punct(open.clone())][..],
                 &subs.collect::<Vec<_>>()[..]
@@ -149,6 +186,10 @@ fn recurse_through_type(
         }
         _ => tok.into(),
     }
+}
+
+fn is_decl_kw(kw: &Ident) -> bool {
+    kw == "struct" || kw == "enum" || kw == "union"
 }
 
 fn report_error(span: Option<Span>, ret: &mut TokenStream, error: &str) {
