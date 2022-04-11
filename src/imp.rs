@@ -84,8 +84,12 @@ fn recurse_through_struct_fields(
     match fields {
         StructFields::Named(n) => {
             modify_punctuated(&mut n.fields, |field| {
-                let name_hint = field.name.to_string().to_case(Case::Pascal);
-                let name_hint = Ident::new(&name_hint, field.name.span());
+                let name_hint = field.name.to_string();
+				let name_hint = match name_hint.starts_with("r#") {
+					true => &name_hint[2..],
+					false => &name_hint,
+				};
+                let name_hint = Ident::new(&name_hint.to_case(Case::Pascal), field.name.span());
                 let ttok =
                     recurse_through_type(&field.ty.tokens[..], strike_attrs, ret, &Some(name_hint));
                 field.ty.tokens = ttok;

@@ -221,3 +221,25 @@ fn triple_generics() {
     };
     check(from, out);
 }
+
+#[test]
+fn raw_identifier_panic_bug() {
+    let plain = quote! {
+        struct A {
+            r#type: () // This was actually enough for a segfault
+        };
+    };
+    recurse_through_definition(plain, vec![], &mut proc_macro2::TokenStream::new());
+}
+
+#[test]
+fn raw_identifier_as_name() {
+    let from = quote! {
+        struct A { r#type: struct ()  };
+    };
+    let out = quote! {
+        struct Type();
+        struct A { r#type: Type, }
+    };
+    check(from, out);
+}
