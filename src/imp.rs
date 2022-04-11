@@ -1,3 +1,4 @@
+use crate::unvenial::modify_punctuated;
 use crate::unvenial::UpdateTokens;
 use convert_case::Case;
 use convert_case::Casing;
@@ -10,13 +11,10 @@ use proc_macro2::TokenTree;
 use quote::quote;
 use quote::quote_spanned;
 use quote::ToTokens;
+use venial::parse_declaration;
 use venial::Attribute;
-use venial::EnumVariant;
-use venial::NamedField;
-use venial::Punctuated;
+use venial::Declaration;
 use venial::StructFields;
-use venial::TupleField;
-use venial::{parse_declaration, Declaration};
 
 fn stream_span(input: impl Iterator<Item = TokenTree>) -> Option<Span> {
     let mut ret = None;
@@ -46,20 +44,14 @@ pub(crate) fn recurse_through_definition(
         }
         Declaration::Enum(e) => {
             strike_through_attributes(&mut e.attributes, &mut strike_attrs);
-            let vs = e.variants.iter().cloned().map(|(mut v, p)| {
+            modify_punctuated(&mut e.variants, |v| {
                 recurse_through_struct_fields(
                     &mut v.contents,
                     &strike_attrs,
                     ret,
                     &Some(v.name.clone()),
                 );
-                (v, p)
             });
-            let mut new_variants: Punctuated<EnumVariant> = Default::default();
-            for (v, p) in vs {
-                new_variants.push(v, Some(p));
-            }
-            e.variants = new_variants;
             e.update_tokens();
         }
         _ => {
@@ -88,7 +80,7 @@ fn recurse_through_struct_fields(
 ) {
     match fields {
         StructFields::Named(n) => {
-            let fields = n.fields.iter().cloned().map(|(mut field, punct)| {
+            modify_punctuated(&mut n.fields, |field| {
                 let name_hint = field.name.to_string().to_case(Case::Pascal);
                 let name_hint = Ident::new(&name_hint, field.name.span());
                 let ttok = recurse_through_type(
@@ -98,28 +90,16 @@ fn recurse_through_struct_fields(
                     &Some(name_hint),
                 );
                 field.ty.tokens = ttok;
-                (field, punct)
             });
-            let mut new_fields: Punctuated<NamedField> = Default::default();
-            for (field, punct) in fields {
-                new_fields.push(field, Some(punct));
-            }
-            n.fields = new_fields;
             n.update_tokens();
         }
         StructFields::Unit => (),
         StructFields::Tuple(t) => {
-            let fields = t.fields.iter().cloned().map(|(mut field, punct)| {
+            modify_punctuated(&mut t.fields, |field| {
                 let ttok =
                     recurse_through_type(&field.ty.tokens[..], &strike_attrs, ret, name_hint);
                 field.ty.tokens = ttok;
-                (field, punct)
             });
-            let mut new_fields: Punctuated<TupleField> = Default::default();
-            for (field, punct) in fields {
-                new_fields.push(field, Some(punct));
-            }
-            t.fields = new_fields;
             t.update_tokens();
         }
     }

@@ -1,6 +1,6 @@
 use proc_macro2::{Group, TokenStream};
 use quote::ToTokens;
-use venial::{Enum, NamedStructFields, TupleStructFields};
+use venial::{Enum, NamedStructFields, Punctuated, TupleStructFields};
 
 pub(crate) trait UpdateTokens {
     fn update_tokens(&mut self);
@@ -31,4 +31,14 @@ fn punctuated_to_group<T: ToTokens>(from: &venial::Punctuated<T>, to: &mut Group
         punct.to_tokens(&mut group);
     }
     *to = Group::new(to.delimiter(), group)
+}
+
+pub(crate) fn modify_punctuated<T: Clone>(modify: &mut Punctuated<T>, mut f: impl FnMut(&mut T)) {
+    let mut new: Punctuated<T> = Default::default();
+    for (v, p) in modify.iter() {
+        let mut v: T = v.clone();
+        f(&mut v);
+        new.push(v, Some(p.clone()));
+    }
+    *modify = new;
 }
