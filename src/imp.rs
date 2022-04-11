@@ -11,14 +11,17 @@ use proc_macro2::TokenTree;
 use quote::quote;
 use quote::quote_spanned;
 use quote::ToTokens;
+use std::borrow::Cow;
+use std::ops::Deref;
 use venial::parse_declaration;
 use venial::Attribute;
 use venial::Declaration;
 use venial::StructFields;
 
-fn stream_span(input: impl Iterator<Item = TokenTree>) -> Option<Span> {
+fn stream_span(input: impl Iterator<Item = impl Deref<Target = TokenTree>>) -> Option<Span> {
     let mut ret = None;
     for tok in input {
+        let tok = tok.deref();
         match ret {
             None => ret = Some(tok.span()),
             Some(span) => match span.join(tok.span()) {
@@ -35,7 +38,7 @@ pub(crate) fn recurse_through_definition(
     mut strike_attrs: Vec<Attribute>,
     ret: &mut TokenStream,
 ) {
-    let span = stream_span(input.clone().into_iter());
+    let span = stream_span(input.clone().into_iter().map(Cow::Owned));
     let mut parsed = parse_declaration(input);
     match &mut parsed {
         Declaration::Struct(s) => {
@@ -136,7 +139,7 @@ fn recurse_through_type(
                 Some(name) => name.clone(),
                 None => {
                     report_error(
-                        stream_span(tok.iter().cloned()),
+                        stream_span(tok.iter()),
                         ret,
                         "No context for naming substructure",
                     );
@@ -152,19 +155,71 @@ fn recurse_through_type(
         [typ @ TokenTree::Ident(_), TokenTree::Punct(open), inner @ .., TokenTree::Punct(close)]
             if open.as_char() == '<' && close.as_char() == '>' =>
         {
-            let subs = inner
-                .split(|tt| matches!(tt, TokenTree::Punct(comma) if comma.as_char() == ','))
-                .map(|sub| recurse_through_type(sub, strike_attrs, ret, name_hint));
             [
                 &[typ.clone(), TokenTree::Punct(open.clone())][..],
-                &subs.collect::<Vec<_>>()[..]
-                    .join(&[TokenTree::Punct(Punct::new(',', Spacing::Alone))][..]),
+                &for_each_generic_parameter(inner, ret, |group, ret| {
+                    recurse_through_type(group, strike_attrs, ret, name_hint)
+                }),
                 &[TokenTree::Punct(close.clone())],
             ]
             .concat()
         }
         _ => tok.into(),
     }
+}
+
+// Groups in token trees aren't used for Generics<Asdf<Bsdf, Csdf>> /ö\
+// Instead, that's just a flat array of Puncts and Idents.
+// But I need to process that tree-like
+fn for_each_generic_parameter(
+    args_in: &[TokenTree],
+    output: &mut TokenStream,
+    mut f: impl FnMut(&[TokenTree], &mut TokenStream) -> Vec<TokenTree>,
+) -> Vec<TokenTree> {
+    // Yeah, this is quadratic... But I don't want to introduce another type
+    let punct = |punct| TokenTree::Punct(Punct::new(punct, Spacing::Alone));
+    let mut depth = 0;
+    let mut group = vec![];
+    let mut ret = vec![];
+    let mut args = args_in.to_vec();
+    if !matches!(args.last(), Some(TokenTree::Punct(comma)) if comma.as_char() == ',') {
+        // The last thing always being a comma makes the next loop easier to write
+        args.push(punct(','));
+    }
+    for tt in args {
+        match tt {
+            TokenTree::Punct(comma) if comma.as_char() == ',' && depth == 0 => {
+                ret.extend_from_slice(&f(&group, output));
+                ret.push(TokenTree::Punct(comma));
+                group.clear();
+            }
+            tt => {
+                match &tt {
+                    TokenTree::Punct(opening) if opening.as_char() == '<' => {
+                        depth += 1;
+                    }
+                    TokenTree::Punct(closing) if closing.as_char() == '>' => {
+                        if depth == 0 {
+                            report_error(Some(closing.span()), output, "Too many >");
+                            return ret;
+                        }
+                        depth -= 1;
+                    }
+                    _ => (),
+                }
+                group.push(tt);
+            }
+        };
+    }
+    if !group.is_empty() {
+        panic!(
+            "Internal type parsing: We forced a comma as the last token, yet we did not find it..."
+        );
+    }
+    if depth != 0 {
+        report_error(stream_span(args_in.iter()), output, "Too few >");
+    }
+    ret
 }
 
 fn is_decl_kw(kw: &Ident) -> bool {

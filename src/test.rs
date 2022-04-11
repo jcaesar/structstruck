@@ -98,7 +98,7 @@ fn in_generics() {
             e: u128,
         }
         struct Parent {
-            a: Option<A>,
+            a: Option<A, >,
             b: Result<Then, Else, >,
         }
     };
@@ -166,7 +166,7 @@ fn tupledec() {
 }
 
 #[test]
-fn tuples_need_semicolon() {
+fn tuples_need_semicolon_bug() {
     let from = quote! {
         struct Outer {
             enum_demo: enum {
@@ -185,6 +185,39 @@ fn tuples_need_semicolon() {
             TupleVariant (TupleVariant ,) ,
         }
         struct Outer { enum_demo : EnumDemo , }
+    };
+    check(from, out);
+}
+
+#[test]
+fn double_generics_bug() {
+    let from = quote! {
+        pub struct EventSourceSpec {
+            pub kafka: Option<HashMap<String,
+                pub struct KafkaSourceSpec {
+                    pub url: String,
+                }
+            > >,
+        }
+    };
+    let out = quote! {
+        pub struct KafkaSourceSpec { pub url : String , }
+        pub struct EventSourceSpec { pub kafka : Option < HashMap < String , KafkaSourceSpec, >, > , }
+    };
+    check(from, out);
+}
+
+#[test]
+fn triple_generics() {
+    let from = quote! {
+        struct A (
+            Option<Result<struct B(), Option<struct C()> > >
+        );
+    };
+    let out = quote! {
+        struct B();
+        struct C();
+        struct A(Option<Result<B, Option<C, >, >, >,);
     };
     check(from, out);
 }
