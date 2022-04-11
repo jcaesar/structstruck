@@ -30,7 +30,9 @@ fn punctuated_to_group<T: ToTokens>(from: &venial::Punctuated<T>, to: &mut Group
         field.to_tokens(&mut group);
         punct.to_tokens(&mut group);
     }
-    *to = Group::new(to.delimiter(), group)
+    let mut group = Group::new(to.delimiter(), group);
+    group.set_span(to.span());
+    *to = group;
 }
 
 pub(crate) fn modify_punctuated<T: Clone>(modify: &mut Punctuated<T>, mut f: impl FnMut(&mut T)) {
