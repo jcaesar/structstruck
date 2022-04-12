@@ -21,10 +21,11 @@
 //! which the JSON object could deserialize into:
 //! ```no_run
 //! struct Resource {
+//!     name: String,
 //!     storage: Storage,
 //! }
 //! struct Storage {
-//!     node_size: String, 
+//!     disk_size: String, 
 //!     storage_types: StorageTypes,
 //! }
 //! struct StorageTypes {
@@ -43,7 +44,7 @@
 //! struct Resource {
 //!     name: String,
 //!     storage: struct {
-//!         node_size: String,
+//!         disk_size: String,
 //!         storage_types: struct {
 //!             hdd: bool,
 //!             ssd: bool,
