@@ -24,7 +24,7 @@
 //!     storage: Storage,
 //! }
 //! struct Storage {
-//!     node_size: String, 
+//!     node_size: String,
 //!     storage_types: StorageTypes,
 //! }
 //! struct StorageTypes {
@@ -55,7 +55,7 @@
 //! This crate allows you to do exactly that, at the expense of one macro.
 //!
 //! ### Usage
-//! 
+//!
 //! Wrap your nested struct into an invocation of `structstruck::strike!`.
 //! ```no_run
 //! structstruck::strike! {
@@ -88,7 +88,7 @@
 //!     }
 //! }
 //! ```
-//! 
+//!
 //! #### Supported declarations
 //! structstruck, despite its name, works with enums and structs, and with tuple and named variants.
 //! ```no_run
@@ -189,7 +189,6 @@
 mod imp;
 #[cfg(test)]
 mod test;
-mod unvenial;
 
 /// Main functionality
 ///

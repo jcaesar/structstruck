@@ -15,4 +15,4 @@ proc-macro = true
 convert_case = "0.5.0"
 proc-macro2 = "1.0.37"
 quote = "1.0.17"
-venial = "0.2.1"
+venial = { git = "https://github.com/PoignardAzur/venial", rev = "436701c08c513a008a1080964a7d6b407af1e158" }
