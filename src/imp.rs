@@ -176,25 +176,19 @@ fn recurse_through_type(
 // Instead, that's just a flat array of Puncts and Idents.
 // But I need to process that tree-like
 fn for_each_generic_parameter(
-    args_in: &[TokenTree],
+    args: &[TokenTree],
     output: &mut TokenStream,
     mut f: impl FnMut(&[TokenTree], &mut TokenStream) -> Vec<TokenTree>,
 ) -> Vec<TokenTree> {
     // Yeah, this is quadratic... But I don't want to introduce another type
-    let punct = |punct| TokenTree::Punct(Punct::new(punct, Spacing::Alone));
     let mut depth = 0;
     let mut group = vec![];
     let mut ret = vec![];
-    let mut args = args_in.to_vec();
-    if !matches!(args.last(), Some(TokenTree::Punct(comma)) if comma.as_char() == ',') {
-        // The last thing always being a comma makes the next loop easier to write
-        args.push(punct(','));
-    }
     for tt in args {
         match tt {
             TokenTree::Punct(comma) if comma.as_char() == ',' && depth == 0 => {
                 ret.extend_from_slice(&f(&group, output));
-                ret.push(TokenTree::Punct(comma));
+                ret.push(TokenTree::Punct(comma.clone()));
                 group.clear();
             }
             tt => {
@@ -211,17 +205,15 @@ fn for_each_generic_parameter(
                     }
                     _ => (),
                 }
-                group.push(tt);
+                group.push(tt.clone());
             }
         };
     }
     if !group.is_empty() {
-        panic!(
-            "Internal type parsing: We forced a comma as the last token, yet we did not find it..."
-        );
+        ret.extend_from_slice(&f(&group, output));
     }
     if depth != 0 {
-        report_error(stream_span(args_in.iter()), output, "Too few >");
+        report_error(stream_span(args.iter()), output, "Too few >");
     }
     ret
 }

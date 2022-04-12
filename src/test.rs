@@ -98,7 +98,7 @@ fn in_generics() {
             e: u128,
         }
         struct Parent {
-            a: Option<A, >,
+            a: Option<A>,
             b: Result<Then, Else, >,
         }
     };
@@ -202,7 +202,7 @@ fn double_generics_bug() {
     };
     let out = quote! {
         pub struct KafkaSourceSpec { pub url : String , }
-        pub struct EventSourceSpec { pub kafka : Option < HashMap < String , KafkaSourceSpec, >, > , }
+        pub struct EventSourceSpec { pub kafka : Option < HashMap < String , KafkaSourceSpec > > , }
     };
     check(from, out);
 }
@@ -217,7 +217,7 @@ fn triple_generics() {
     let out = quote! {
         struct B();
         struct C();
-        struct A(Option<Result<B, Option<C, >, >, >,);
+        struct A(Option<Result<B, Option<C> > >, );
     };
     check(from, out);
 }
