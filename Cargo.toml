@@ -7,6 +7,7 @@ keywords = ["proc_macro", "nested", "struct"]
 version = "0.1.0"
 edition = "2021"
 description = "Nested struct and enum definitions"
+repository = "https://github.com/jcaesar/structstruck"
 
 [lib]
 proc-macro = true
