@@ -25,7 +25,7 @@ struct Parent {
 }
 ```
 This proc macro crate allows exactly that.
-Check the [docs](docs.rs/structstruck) on how exaclty.
+Check the [docs](https://docs.rs/structstruck) on how exaclty.
 
 The original use case for this crate is to be able to conveniently write kubernetes custom resources with `kube`.
 ```rust
