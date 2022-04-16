@@ -1,5 +1,5 @@
-use crate::imp::recurse_through_definition;
-use proc_macro2::{TokenStream, TokenTree};
+use crate::imp::{recurse_through_definition, type_tree, TypeTree};
+use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 use quote::quote;
 
 fn check(plain: proc_macro2::TokenStream, nested: proc_macro2::TokenStream) {
@@ -240,6 +240,48 @@ fn raw_identifier_as_name() {
     let out = quote! {
         struct Type();
         struct A { r#type: Type, }
+    };
+    check(from, out);
+}
+
+#[test]
+fn type_tree_parsing() {
+    let inp = quote! {
+        Hoge < Huge < Hage, Hegge >, struckt Hacke<'a,U> where P: E<> {} >
+    };
+    let expect = quote! {
+        Hoge ( Huge ( Hage, Hegge ), struckt Hacke('a,U) where P: E() {} )
+    };
+    let inp = inp.into_iter().collect::<Vec<_>>();
+    let mut out = proc_macro2::TokenStream::new();
+    let res = type_tree(&inp, &mut out);
+    fn tost(inp: Vec<TypeTree>) -> TokenStream {
+        inp.into_iter()
+            .map(|t| match t {
+                TypeTree::Group(_, s, _) => {
+                    TokenTree::Group(Group::new(Delimiter::Parenthesis, tost(s)))
+                }
+                TypeTree::Token(t) => t.clone(),
+            })
+            .collect()
+    }
+    println!("{}", out);
+    assert_eq!(tost(res).to_string(), expect.to_string());
+    assert!(out.is_empty());
+}
+
+#[test]
+fn generics_on_def() {
+    let from = quote! {
+        struct Outer {
+            unnamed: struct<T>{t: T},
+            whatev: struct Named<T>{t: T},
+        };
+    };
+    let out = quote! {
+        struct Unnamed < T > { t : T , }
+        struct Named < T > { t : T , }
+        struct Outer { unnamed : Unnamed , whatev : Named , }
     };
     check(from, out);
 }

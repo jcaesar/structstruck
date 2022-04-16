@@ -25,7 +25,7 @@
 //!     storage: Storage,
 //! }
 //! struct Storage {
-//!     disk_size: String, 
+//!     disk_size: String,
 //!     storage_types: StorageTypes,
 //! }
 //! struct StorageTypes {
@@ -56,7 +56,7 @@
 //! This crate allows you to do exactly that, at the expense of one macro.
 //!
 //! ### Usage
-//! 
+//!
 //! Wrap your nested struct into an invocation of `structstruck::strike!`.
 //! ```no_run
 //! structstruck::strike! {
@@ -89,7 +89,7 @@
 //!     }
 //! }
 //! ```
-//! 
+//!
 //! #### Supported declarations
 //! structstruck, despite its name, works with enums and structs, and with tuple and named variants.
 //! ```no_run
@@ -177,9 +177,9 @@
 //! ```
 //!
 //! ### Missing features, limitations
-//!  * Currently, where clauses and generic parameters will cause parse errors.
 //!  * Public fields don't automatically make their structs public.
 //!  * You can't exclude subtrees from `#[strikethrough[…]]`.
+//!  * Generic parameter constraints need to be repeated for each structs.
 //!  * Usage error handling is minimal, e.g.:
 //!  * No protection against using the name of a field twice as the name of a struct,  
 //!    e.g. with `foo: Result<struct {…}, struct {…}>,`

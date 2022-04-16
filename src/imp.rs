@@ -12,6 +12,7 @@ use quote::quote;
 use quote::quote_spanned;
 use quote::ToTokens;
 use std::borrow::Cow;
+use std::mem;
 use std::ops::Deref;
 use venial::parse_declaration;
 use venial::Attribute;
@@ -77,7 +78,7 @@ pub(crate) fn recurse_through_definition(
 
 fn recurse_through_struct_fields(
     fields: &mut venial::StructFields,
-    strike_attrs: &Vec<Attribute>,
+    strike_attrs: &[Attribute],
     ret: &mut TokenStream,
     name_hint: &Option<Ident>,
 ) {
@@ -85,22 +86,33 @@ fn recurse_through_struct_fields(
         StructFields::Named(n) => {
             modify_punctuated(&mut n.fields, |field| {
                 let name_hint = field.name.to_string();
-				let name_hint = match name_hint.starts_with("r#") {
-					true => &name_hint[2..],
-					false => &name_hint,
-				};
+                let name_hint = match name_hint.starts_with("r#") {
+                    true => &name_hint[2..],
+                    false => &name_hint,
+                };
                 let name_hint = Ident::new(&name_hint.to_case(Case::Pascal), field.name.span());
-                let ttok =
-                    recurse_through_type(&field.ty.tokens[..], strike_attrs, ret, &Some(name_hint));
-                field.ty.tokens = ttok;
+                let ttok = mem::take(&mut field.ty.tokens);
+                recurse_through_type_list(
+                    &type_tree(&ttok, ret),
+                    strike_attrs,
+                    ret,
+                    &Some(name_hint),
+                    &mut field.ty.tokens,
+                );
             });
             n.update_tokens();
         }
         StructFields::Unit => (),
         StructFields::Tuple(t) => {
             modify_punctuated(&mut t.fields, |field| {
-                let ttok = recurse_through_type(&field.ty.tokens[..], strike_attrs, ret, name_hint);
-                field.ty.tokens = ttok;
+                let ttok = mem::take(&mut field.ty.tokens);
+                recurse_through_type_list(
+                    &type_tree(&ttok, ret),
+                    strike_attrs,
+                    ret,
+                    name_hint,
+                    &mut field.ty.tokens,
+                );
             });
             t.update_tokens();
         }
@@ -122,104 +134,141 @@ fn strike_through_attributes(dec_attrs: &mut Vec<Attribute>, strike_attrs: &mut 
     dec_attrs.extend_from_slice(&strike_attrs[..]);
 }
 
-fn recurse_through_type(
-    tok: &[TokenTree],
-    strike_attrs: &Vec<Attribute>,
+fn recurse_through_type_list(
+    tok: &[TypeTree],
+    strike_attrs: &[Attribute],
     ret: &mut TokenStream,
     name_hint: &Option<Ident>,
-) -> Vec<TokenTree> {
-    match tok {
-        // Named substruct
-        tt @ [.., TokenTree::Ident(kw), name @ TokenTree::Ident(_), TokenTree::Group(_)]
-            if is_decl_kw(kw) =>
-        {
-            let name = name.clone();
-            recurse_through_definition(tt.iter().cloned().collect(), strike_attrs.clone(), ret);
-            vec![name]
+    type_ret: &mut Vec<TokenTree>,
+) {
+    let mut tok = tok;
+    loop {
+        let end = tok.iter().position(
+            |t| matches!(t, TypeTree::Token(TokenTree::Punct(comma)) if comma.as_char() == ','),
+        );
+        let current = &tok[..end.unwrap_or(tok.len())];
+        recurse_through_type(current, strike_attrs, ret, name_hint, type_ret);
+        if let Some(comma) = end {
+            type_ret.push(match tok[comma] {
+                TypeTree::Token(comma) => comma.clone(),
+                _ => unreachable!(),
+            });
+            tok = &tok[comma + 1..];
+        } else {
+            return;
         }
-        // Unnamed substruct
-        [head @ .., TokenTree::Ident(kw), body @ TokenTree::Group(_)] if is_decl_kw(kw) => {
+    }
+}
+fn recurse_through_type(
+    tok: &[TypeTree],
+    strike_attrs: &[Attribute],
+    ret: &mut TokenStream,
+    name_hint: &Option<Ident>,
+    type_ret: &mut Vec<TokenTree>,
+) {
+    let kw = tok
+        .iter()
+        .any(|t| matches!(t, TypeTree::Token(TokenTree::Ident(kw)) if is_decl_kw(kw)));
+    if kw {
+        let mut decl = Vec::new();
+        un_tree_type(tok, &mut decl);
+        let pos = decl
+            .iter()
+            .position(|t| matches!(t, TokenTree::Ident(kw) if is_decl_kw(kw)))
+            .unwrap();
+        if let Some(name @ TokenTree::Ident(_)) = decl.get(pos + 1) {
+            type_ret.push(name.clone());
+            recurse_through_definition(decl.into_iter().collect(), strike_attrs.to_vec(), ret);
+        } else {
             let name = match name_hint {
-                Some(name) => name.clone(),
+                Some(name) => TokenTree::Ident(name.clone()),
                 None => {
                     report_error(
-                        stream_span(tok.iter()),
+                        stream_span(decl.iter()),
                         ret,
                         "No context for naming substructure",
                     );
-                    return vec![TokenTree::Punct(Punct::new('!', Spacing::Alone))];
+                    TokenTree::Punct(Punct::new('!', Spacing::Alone))
                 }
             };
-            let head = head.iter().cloned().collect::<TokenStream>();
-            let newthing = quote! {#head #kw #name #body};
-            recurse_through_definition(newthing, strike_attrs.clone(), ret);
-            vec![TokenTree::Ident(name)]
+            let tail = decl.drain((pos + 1)..).collect::<TokenStream>();
+            let head = decl.into_iter().collect::<TokenStream>();
+            let newthing = quote! {#head #name #tail};
+            recurse_through_definition(newthing, strike_attrs.to_vec(), ret);
+            type_ret.push(name);
         }
-        // Curse into generics
-        [typ @ TokenTree::Ident(_), TokenTree::Punct(open), inner @ .., TokenTree::Punct(close)]
-            if open.as_char() == '<' && close.as_char() == '>' =>
-        {
-            [
-                &[typ.clone(), TokenTree::Punct(open.clone())][..],
-                &for_each_generic_parameter(inner, ret, |group, ret| {
-                    recurse_through_type(group, strike_attrs, ret, name_hint)
-                }),
-                &[TokenTree::Punct(close.clone())],
-            ]
-            .concat()
-        }
-        _ => tok.into(),
+    } else {
+        un_type_tree(tok, type_ret, |g, type_ret| {
+            recurse_through_type_list(g, strike_attrs, ret, name_hint, type_ret)
+        });
     }
 }
 
-// Groups in token trees aren't used for Generics<Asdf<Bsdf, Csdf>> /ö\
-// Instead, that's just a flat array of Puncts and Idents.
-// But I need to process that tree-like
-fn for_each_generic_parameter(
-    args: &[TokenTree],
-    output: &mut TokenStream,
-    mut f: impl FnMut(&[TokenTree], &mut TokenStream) -> Vec<TokenTree>,
-) -> Vec<TokenTree> {
-    // Yeah, this is quadratic... But I don't want to introduce another type
-    let mut depth = 0;
-    let mut group = vec![];
-    let mut ret = vec![];
+fn un_tree_type(tok: &[TypeTree], type_ret: &mut Vec<TokenTree>) {
+    un_type_tree(tok, type_ret, un_tree_type)
+}
+
+fn un_type_tree(
+    tok: &[TypeTree],
+    type_ret: &mut Vec<TokenTree>,
+    mut f: impl FnMut(&[TypeTree], &mut Vec<TokenTree>),
+) {
+    for tt in tok.iter() {
+        match tt {
+            TypeTree::Group(o, g, c) => {
+                type_ret.push(TokenTree::Punct((*o).clone()));
+                f(g, type_ret);
+                if let Some(c) = c {
+                    type_ret.push(TokenTree::Punct((*c).clone()));
+                }
+            }
+            TypeTree::Token(t) => type_ret.push((*t).clone()),
+        }
+    }
+}
+
+#[cfg_attr(test, derive(Debug))]
+pub(crate) enum TypeTree<'a> {
+    Group(&'a Punct, Vec<TypeTree<'a>>, Option<&'a Punct>),
+    Token(&'a TokenTree),
+}
+
+pub(crate) fn type_tree<'a>(args: &'a [TokenTree], ret: &'_ mut TokenStream) -> Vec<TypeTree<'a>> {
+    let mut stac = vec![];
+    let mut current = vec![];
     for tt in args {
         match tt {
-            TokenTree::Punct(comma) if comma.as_char() == ',' && depth == 0 => {
-                ret.extend_from_slice(&f(&group, output));
-                ret.push(TokenTree::Punct(comma.clone()));
-                group.clear();
+            TokenTree::Punct(open) if open.as_char() == '<' => {
+                stac.push((open, mem::take(&mut current)));
             }
-            tt => {
-                match &tt {
-                    TokenTree::Punct(opening) if opening.as_char() == '<' => {
-                        depth += 1;
-                    }
-                    TokenTree::Punct(closing) if closing.as_char() == '>' => {
-                        if depth == 0 {
-                            report_error(Some(closing.span()), output, "Too many >");
-                            return ret;
-                        }
-                        depth -= 1;
-                    }
-                    _ => (),
+            TokenTree::Punct(close) if close.as_char() == '>' => {
+                if let Some((open, parent)) = stac.pop() {
+                    let child = mem::replace(&mut current, parent);
+                    current.push(TypeTree::Group(open, child, Some(close)));
+                } else {
+                    report_error(Some(close.span()), ret, "Unexpected >");
+                    current.push(TypeTree::Token(tt));
                 }
-                group.push(tt.clone());
             }
-        };
+            tt => current.push(TypeTree::Token(tt)),
+        }
     }
-    if !group.is_empty() {
-        ret.extend_from_slice(&f(&group, output));
+    while let Some((open, parent)) = stac.pop() {
+        report_error(Some(open.span()), ret, "Unclosed group");
+        let child = mem::replace(&mut current, parent);
+        current.push(TypeTree::Group(open, child, None));
     }
-    if depth != 0 {
-        report_error(stream_span(args.iter()), output, "Too few >");
-    }
-    ret
+    current
 }
 
 fn is_decl_kw(kw: &Ident) -> bool {
-    kw == "struct" || kw == "enum" || kw == "union"
+    kw == "struct"
+        || kw == "enum"
+        || kw == "union"
+        || kw == "type"
+        || kw == "fn"
+        || kw == "mod"
+        || kw == "trait"
 }
 
 fn report_error(span: Option<Span>, ret: &mut TokenStream, error: &str) {
