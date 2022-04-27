@@ -3,10 +3,10 @@
 version = 3
 
 [[package]]
-name = "convert_case"
-version = "0.5.0"
+name = "heck"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb4a24b1aaf0fd0ce8b45161144d6f42cd91677fd5940fd431183eb023b3a2b8"
+checksum = "2540771e65fc8cb83cd6e8a237f70c319bd5c29f78ed1084ba5d50eeac86f7f9"
 
 [[package]]
 name = "proc-macro2"
@@ -30,7 +30,7 @@ dependencies = [
 name = "structstruck"
 version = "0.1.0"
 dependencies = [
- "convert_case",
+ "heck",
  "proc-macro2",
  "quote",
  "venial",

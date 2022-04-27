@@ -1,7 +1,6 @@
 use crate::unvenial::modify_punctuated;
 use crate::unvenial::UpdateTokens;
-use convert_case::Case;
-use convert_case::Casing;
+use heck::ToPascalCase;
 use proc_macro2::Ident;
 use proc_macro2::Punct;
 use proc_macro2::Spacing;
@@ -90,7 +89,7 @@ fn recurse_through_struct_fields(
                     true => &name_hint[2..],
                     false => &name_hint,
                 };
-                let name_hint = Ident::new(&name_hint.to_case(Case::Pascal), field.name.span());
+                let name_hint = Ident::new(&name_hint.to_pascal_case(), field.name.span());
                 let ttok = mem::take(&mut field.ty.tokens);
                 recurse_through_type_list(
                     &type_tree(&ttok, ret),
