@@ -338,3 +338,22 @@ fn pub_tuple_pub_struct() {
     };
     check(from, out);
 }
+
+#[test]
+fn public_enum() {
+    let from = quote! {
+        enum Outer {
+            Struct(pub pub struct { a: Zing }),
+            Enum(pub pub enum { A, B, C }),
+        };
+    };
+    let out = quote! {
+        pub struct Struct { a : Zing }
+        pub enum Enum { A , B , C }
+        enum Outer {
+            Struct (pub Struct) ,
+            Enum (pub Enum) ,
+        }
+    };
+    check(from, out);
+}
