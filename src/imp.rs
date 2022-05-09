@@ -103,15 +103,24 @@ fn recurse_through_struct_fields(
 }
 
 fn strike_through_attributes(dec_attrs: &mut Vec<Attribute>, strike_attrs: &mut Vec<Attribute>) {
-    dec_attrs.retain(|attr| match &attr.child_tokens[..] {
-        [TokenTree::Ident(kw), TokenTree::Group(body)] if kw == "strikethrough" => {
+    dec_attrs.retain(|attr| {
+        if matches!(&attr.path[..], [TokenTree::Ident(kw)] if kw == "strikethrough") {
             strike_attrs.push(Attribute {
-                child_tokens: body.stream().into_iter().collect(),
-                ..attr.clone()
+                tk_hashbang: attr.tk_hashbang.clone(),
+                tk_braces: attr
+                    .tk_group
+                    .clone()
+                    .unwrap_or_else(|| attr.tk_braces.clone()),
+                // Hack a bit: Put all the tokens into the path.
+                path: attr.value.clone().unwrap_or_default(),
+                tk_equals: None,
+                tk_group: None,
+                value: None,
             });
             false
+        } else {
+            true
         }
-        _ => true,
     });
     dec_attrs.extend_from_slice(&strike_attrs[..]);
 }
