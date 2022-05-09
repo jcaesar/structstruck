@@ -95,14 +95,40 @@ fn recurse_through_struct_fields(
                     &Some(name_hint),
                     &mut field.ty.tokens,
                 );
-            };
+            }
         }
         StructFields::Unit => (),
         StructFields::Tuple(t) => {
             for (field, _) in &mut t.fields.iter_mut() {
                 let ttok = mem::take(&mut field.ty.tokens);
+                let ttok = type_tree(&ttok, ret);
+
+                // Slight hack for tuple structs:
+                // struct Foo(pub struct Bar()); is ambigous:
+                // Which does the pub belong to, Bar or Foo::0?
+                // I'd say Bar, but venial parses the pub as the visibility specifier of the current struct field
+                // So, transfer the visibility specifier to the declaration token stream, but only if there isn't already one:
+                // I also don't want to break struct Foo(pub pub struct Bar()); (both Bar and Foo::0 public)
+                let vtok;
+                let ttok = match ttok
+                    .iter()
+                    .any(|t| matches!(t, TypeTree::Token(TokenTree::Ident(kw)) if kw == "pub"))
+                {
+                    true => ttok,
+                    false => match mem::take(&mut field.vis_marker) {
+                        Some(vis) => {
+                            vtok = vis.into_token_stream().into_iter().collect::<Vec<_>>();
+                            vtok.iter()
+                                .map(TypeTree::Token)
+                                .chain(ttok.into_iter())
+                                .collect()
+                        }
+                        None => ttok,
+                    },
+                };
+
                 recurse_through_type_list(
-                    &type_tree(&ttok, ret),
+                    &ttok,
                     strike_attrs,
                     ret,
                     name_hint,

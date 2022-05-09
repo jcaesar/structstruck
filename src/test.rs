@@ -285,3 +285,56 @@ fn generics_on_def() {
     };
     check(from, out);
 }
+
+#[test]
+fn pub_enum() {
+    let from = quote! {
+        enum Opts {
+            Login(pub struct {
+                hs: Url,
+            }),
+            Run(pub struct {
+                channel: Option<RoomId>,
+            }),
+        }
+    };
+    let out = quote! {
+        pub struct Login {
+            hs: Url,
+        }
+
+        pub struct Run {
+            channel: Option<RoomId>,
+        }
+
+        enum Opts {
+            Login(Login),
+            Run(Run),
+        }
+    };
+    check(from, out);
+}
+
+#[test]
+fn tuple_pub_struct() {
+    let from = quote! {
+        struct Foo(pub struct Bar(u32));
+    };
+    let out = quote! {
+        pub struct Bar(u32);
+        struct Foo(Bar);
+    };
+    check(from, out);
+}
+
+#[test]
+fn pub_tuple_pub_struct() {
+    let from = quote! {
+        struct Foo(pub pub struct Bar(u32));
+    };
+    let out = quote! {
+        pub struct Bar(u32);
+        struct Foo(pub Bar);
+    };
+    check(from, out);
+}
