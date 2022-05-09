@@ -44,9 +44,9 @@ checksum = "8ccb82d61f80a663efe1f787a51b16b5a51e3314d6ac365b08639f52387b33f3"
 
 [[package]]
 name = "venial"
-version = "0.2.1"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39a1af830478db65d14301ea42aa021a2377f688341d88f399e41ff864b20cce"
+checksum = "927ebbcb62b34a3062e3ee01d9518c8306c23d4920f083a1dd75c1190acc7155"
 dependencies = [
  "proc-macro2",
  "quote",

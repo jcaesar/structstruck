@@ -190,7 +190,6 @@
 mod imp;
 #[cfg(test)]
 mod test;
-mod unvenial;
 
 /// Main functionality
 ///

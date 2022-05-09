@@ -25,7 +25,7 @@ fn strikethrough_derive() {
     let out = quote! {
         #[derive(Debug, Default, PartialEq)]
         struct Shared {
-            d: i32,
+            d: i32
         }
         #[gobbel]
         #[derive(Debug, Default, PartialEq)]
@@ -99,7 +99,7 @@ fn in_generics() {
         }
         struct Parent {
             a: Option<A>,
-            b: Result<Then, Else, >,
+            b: Result<Then, Else, >
         }
     };
     check(from, out);
@@ -135,11 +135,11 @@ fn enum_named() {
     };
     let out = quote! {
         enum A {
-            Foo { b: i8, },
+            Foo { b: i8 }
         }
         enum Parent {
-            A { a: A, c: i16, },
-            B {},
+            A { a: A, c: i16 },
+            B {}
         }
     };
     check(from, out);
@@ -155,12 +155,12 @@ fn tupledec() {
         }
     };
     let out = quote! {
-        struct A (i16, );
-        struct Bar { bar: i64,  }
-        struct B (Bar ,);
-        struct Foo (i32 ,);
-        enum C { Foo (Foo ,) , }
-        struct Parent { a : A , b : B , c : C , }
+        struct A (i16);
+        struct Bar { bar: i64 }
+        struct B (Bar);
+        struct Foo (i32);
+        enum C { Foo (Foo) }
+        struct Parent { a : A , b : B , c : C }
     };
     check(from, out);
 }
@@ -178,13 +178,13 @@ fn tuples_need_semicolon_bug() {
         }
     };
     let out = quote! {
-        struct TupleStruct (usize ,);
-        struct TupleVariant (isize ,);
+        struct TupleStruct (usize);
+        struct TupleVariant (isize);
         enum EnumDemo {
-            NamedVariant { tuple_struct : TupleStruct , } ,
-            TupleVariant (TupleVariant ,) ,
+            NamedVariant { tuple_struct : TupleStruct } ,
+            TupleVariant (TupleVariant)
         }
-        struct Outer { enum_demo : EnumDemo , }
+        struct Outer { enum_demo : EnumDemo }
     };
     check(from, out);
 }
@@ -217,7 +217,7 @@ fn triple_generics() {
     let out = quote! {
         struct B();
         struct C();
-        struct A(Option<Result<B, Option<C> > >, );
+        struct A(Option<Result<B, Option<C> > > );
     };
     check(from, out);
 }
@@ -239,7 +239,7 @@ fn raw_identifier_as_name() {
     };
     let out = quote! {
         struct Type();
-        struct A { r#type: Type, }
+        struct A { r#type: Type }
     };
     check(from, out);
 }
@@ -279,8 +279,8 @@ fn generics_on_def() {
         };
     };
     let out = quote! {
-        struct Unnamed < T > { t : T , }
-        struct Named < T > { t : T , }
+        struct Unnamed < T > { t : T }
+        struct Named < T > { t : T }
         struct Outer { unnamed : Unnamed , whatev : Named , }
     };
     check(from, out);

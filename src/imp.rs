@@ -1,5 +1,3 @@
-use crate::unvenial::modify_punctuated;
-use crate::unvenial::UpdateTokens;
 use heck::ToPascalCase;
 use proc_macro2::Ident;
 use proc_macro2::Punct;
@@ -47,15 +45,14 @@ pub(crate) fn recurse_through_definition(
         }
         Declaration::Enum(e) => {
             strike_through_attributes(&mut e.attributes, &mut strike_attrs);
-            modify_punctuated(&mut e.variants, |v| {
+            for (v, _) in &mut e.variants.iter_mut() {
                 recurse_through_struct_fields(
                     &mut v.contents,
                     &strike_attrs,
                     ret,
                     &Some(v.name.clone()),
                 );
-            });
-            e.update_tokens();
+            }
         }
         _ => {
             return report_error(
@@ -67,8 +64,8 @@ pub(crate) fn recurse_through_definition(
     }
     if let Declaration::Struct(s) = &mut parsed {
         if let StructFields::Tuple(_) = s.fields {
-            if s._semicolon.is_none() {
-                s._semicolon = Some(Punct::new(';', Spacing::Alone))
+            if s.tk_semicolon.is_none() {
+                s.tk_semicolon = Some(Punct::new(';', Spacing::Alone))
             }
         }
     }
@@ -83,7 +80,7 @@ fn recurse_through_struct_fields(
 ) {
     match fields {
         StructFields::Named(n) => {
-            modify_punctuated(&mut n.fields, |field| {
+            for (field, _) in &mut n.fields.iter_mut() {
                 let name_hint = field.name.to_string();
                 let name_hint = match name_hint.starts_with("r#") {
                     true => &name_hint[2..],
@@ -98,12 +95,11 @@ fn recurse_through_struct_fields(
                     &Some(name_hint),
                     &mut field.ty.tokens,
                 );
-            });
-            n.update_tokens();
+            };
         }
         StructFields::Unit => (),
         StructFields::Tuple(t) => {
-            modify_punctuated(&mut t.fields, |field| {
+            for (field, _) in &mut t.fields.iter_mut() {
                 let ttok = mem::take(&mut field.ty.tokens);
                 recurse_through_type_list(
                     &type_tree(&ttok, ret),
@@ -112,23 +108,30 @@ fn recurse_through_struct_fields(
                     name_hint,
                     &mut field.ty.tokens,
                 );
-            });
-            t.update_tokens();
+            }
         }
     }
 }
 
 fn strike_through_attributes(dec_attrs: &mut Vec<Attribute>, strike_attrs: &mut Vec<Attribute>) {
-    dec_attrs.retain(|attr| match &attr.child_tokens[..] {
-        [TokenTree::Ident(kw), TokenTree::Group(body)] if kw == "strikethrough" => {
+    dec_attrs.retain(|attr| {
+        if matches!(&attr.path[..], [TokenTree::Ident(kw)] if kw == "strikethrough") {
             strike_attrs.push(Attribute {
-                child_tokens: body.stream().into_iter().collect(),
-                _braces: body.clone(),
-                ..attr.clone()
+                tk_hashbang: attr.tk_hashbang.clone(),
+                tk_braces: attr
+                    .tk_group
+                    .clone()
+                    .unwrap_or_else(|| attr.tk_braces.clone()),
+                // Hack a bit: Put all the tokens into the path.
+                path: attr.value.clone().unwrap_or_default(),
+                tk_equals: None,
+                tk_group: None,
+                value: None,
             });
             false
+        } else {
+            true
         }
-        _ => true,
     });
     dec_attrs.extend_from_slice(&strike_attrs[..]);
 }
