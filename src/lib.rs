@@ -152,7 +152,30 @@
 //! (The structs themselves being generic is not supported yet(?).)
 //!
 //! #### Attributes
-//! Attributes that are supposed to be applied to all declarations can be wrapped in the `#[strikethrough[…]]`
+//! Applying attributes (or doc comments) to a single inner struct would be syntactically awkward:
+//! ```no_run
+//! structstruck::strike! {
+//!     struct Outer {
+//!         documented: /** documentation */ struct {},
+//!         attributed: #[allow(madness)] struct {},
+//!     }
+//! }
+//! ```
+//! Thus, `structstruck` allows to use inner attributes instead and automatically transforms them to outer attributes
+//! ```no_run
+//! structstruck::strike! {
+//!     struct Outer {
+//!         documented: struct {
+//!             //! documentation
+//!         },
+//!         attributed: struct {
+//!             #![forbid(madness)]
+//!         },
+//!     }
+//! }
+//! ```
+//!
+//! To quickly apply attributes to all declarations, attributes can be wrapped in the `#[strikethrough[…]]`
 //! pseudoattribute.
 //! ```no_run
 //! structstruck::strike! {

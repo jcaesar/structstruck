@@ -2,11 +2,11 @@ use crate::imp::{recurse_through_definition, type_tree, TypeTree};
 use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 use quote::quote;
 
-fn check(plain: proc_macro2::TokenStream, nested: proc_macro2::TokenStream) {
-    let mut to = proc_macro2::TokenStream::new();
-    recurse_through_definition(plain, vec![], &mut to);
+fn check(nested: proc_macro2::TokenStream, planexpected: proc_macro2::TokenStream) {
+    let mut plan = proc_macro2::TokenStream::new();
+    recurse_through_definition(nested, vec![], &mut plan);
     // No Eq implementations. :/
-    assert_eq!(to.to_string(), nested.to_string());
+    assert_eq!(plan.to_string(), planexpected.to_string());
 }
 
 #[test]
@@ -356,4 +356,45 @@ fn public_enum() {
         }
     };
     check(from, out);
+}
+
+#[test]
+fn inner_comment() {
+    // Doc comments just desugar to #[doc = r"…"], but whatev, I'll test both.
+    let from = quote! {
+        struct Struck {
+            //! Foo
+            #![bar]
+            blubb: i32
+        };
+    };
+    let out = quote! {
+        /// Foo
+        #[bar]
+        struct Struck { blubb: i32 }
+    };
+    check(from, out);
+}
+
+#[test]
+fn inner_comment_as_in_doc() {
+    let from = quote! {
+        struct Outer {
+            documented: struct {
+                //! documentation
+            },
+            attributed: struct {
+                #![attribute]
+            },
+        }
+    };
+    let out = quote! {
+        struct Outer {
+            documented: /** documentation*/ struct {},
+            attributed: #[attribute] struct {},
+        }
+    };
+    let mut rout = Default::default();
+    recurse_through_definition(out, vec![], &mut rout);
+    check(from, rout);
 }

@@ -1,4 +1,6 @@
 use heck::ToPascalCase;
+use proc_macro2::Delimiter;
+use proc_macro2::Group;
 use proc_macro2::Ident;
 use proc_macro2::Punct;
 use proc_macro2::Spacing;
@@ -37,6 +39,7 @@ pub(crate) fn recurse_through_definition(
     ret: &mut TokenStream,
 ) {
     let span = stream_span(input.clone().into_iter().map(Cow::Owned));
+    let input = move_out_inner_attrs(input);
     let mut parsed = parse_declaration(input);
     match &mut parsed {
         Declaration::Struct(s) => {
@@ -70,6 +73,44 @@ pub(crate) fn recurse_through_definition(
         }
     }
     parsed.to_tokens(ret);
+}
+
+fn move_out_inner_attrs(input: TokenStream) -> TokenStream {
+    let mut prefix = vec![];
+    let mut ret = vec![];
+    for e in input {
+        match e {
+            TokenTree::Group(g) if g.delimiter() == Delimiter::Brace => {
+                let mut tt: Vec<TokenTree> = vec![];
+                let gt = g.stream().into_iter().collect::<Vec<_>>();
+                let mut gt = &gt[..];
+                loop {
+                    match gt {
+                        [TokenTree::Punct(hash), TokenTree::Punct(bang), TokenTree::Group(tree), rest @ ..]
+                            if hash.as_char() == '#' && bang.as_char() == '!' =>
+                        {
+                            gt = rest;
+                            prefix.extend_from_slice(&[
+                                TokenTree::Punct(hash.to_owned()),
+                                TokenTree::Group(tree.to_owned()),
+                            ]);
+                        }
+                        [rest @ ..] => {
+                            for t in rest {
+                                tt.push(t.to_owned());
+                            }
+                            break;
+                        }
+                    }
+                }
+                let mut gr = Group::new(g.delimiter(), tt.into_iter().collect());
+                gr.set_span(g.span());
+                ret.push(TokenTree::Group(gr));
+            }
+            e => ret.push(e),
+        }
+    }
+    prefix.into_iter().chain(ret.into_iter()).collect()
 }
 
 fn recurse_through_struct_fields(
