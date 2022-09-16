@@ -15,6 +15,7 @@ use std::mem;
 use std::ops::Deref;
 use venial::parse_declaration;
 use venial::Attribute;
+use venial::AttributeValue;
 use venial::Declaration;
 use venial::StructFields;
 
@@ -40,14 +41,21 @@ pub(crate) fn recurse_through_definition(
 ) {
     let span = stream_span(input.clone().into_iter().map(Cow::Owned));
     let input = move_out_inner_attrs(input);
-    let mut parsed = parse_declaration(input);
+    let mut parsed = match parse_declaration(input) {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            // Sadly, venial still panics on invalid syntax
+            report_error(span, ret, &format!("{}", e));
+            return;
+        }
+    };
     match &mut parsed {
         Declaration::Struct(s) => {
-            strike_through_attributes(&mut s.attributes, &mut strike_attrs);
+            strike_through_attributes(&mut s.attributes, &mut strike_attrs, ret);
             recurse_through_struct_fields(&mut s.fields, &strike_attrs, ret, &None);
         }
         Declaration::Enum(e) => {
-            strike_through_attributes(&mut e.attributes, &mut strike_attrs);
+            strike_through_attributes(&mut e.attributes, &mut strike_attrs, ret);
             for (v, _) in &mut e.variants.iter_mut() {
                 recurse_through_struct_fields(
                     &mut v.contents,
@@ -180,21 +188,31 @@ fn recurse_through_struct_fields(
     }
 }
 
-fn strike_through_attributes(dec_attrs: &mut Vec<Attribute>, strike_attrs: &mut Vec<Attribute>) {
+fn strike_through_attributes(
+    dec_attrs: &mut Vec<Attribute>,
+    strike_attrs: &mut Vec<Attribute>,
+    ret: &mut TokenStream,
+) {
     dec_attrs.retain(|attr| {
         if matches!(&attr.path[..], [TokenTree::Ident(kw)] if kw == "strikethrough") {
-            strike_attrs.push(Attribute {
-                tk_hashbang: attr.tk_hashbang.clone(),
-                tk_braces: attr
-                    .tk_group
-                    .clone()
-                    .unwrap_or_else(|| attr.tk_braces.clone()),
-                // Hack a bit: Put all the tokens into the path.
-                path: attr.value.clone().unwrap_or_default(),
-                tk_equals: None,
-                tk_group: None,
-                value: None,
-            });
+            match &attr.value {
+                AttributeValue::Group(brackets, value) => {
+                    strike_attrs.push(Attribute {
+                        tk_hashbang: attr.tk_hashbang.clone(),
+                        tk_brackets: brackets.clone(),
+                        // Hack a bit: Put all the tokens into the path.
+                        path: value.to_vec(),
+                        value: AttributeValue::Empty,
+                    });
+                }
+                _ => {
+                    report_error(
+                        stream_span(attr.get_value_tokens().iter()),
+                        ret,
+                        "#[strikethrough …]: … must be a [group]",
+                    );
+                }
+            };
             false
         } else {
             true

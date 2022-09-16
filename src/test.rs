@@ -398,3 +398,16 @@ fn inner_comment_as_in_doc() {
     recurse_through_definition(out, vec![], &mut rout);
     check(from, rout);
 }
+
+#[test]
+fn strikethrough_weird() {
+    let out = quote! {
+        #[strikethrough = foo]
+        struct struct { }
+    };
+    let mut rout = Default::default();
+    recurse_through_definition(out, vec![], &mut rout);
+    assert!(rout
+        .into_iter()
+        .any(|t| matches!(t, TokenTree::Ident(kw) if kw == "compile_error")));
+}

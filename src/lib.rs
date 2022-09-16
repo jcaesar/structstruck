@@ -161,7 +161,7 @@
 //!     }
 //! }
 //! ```
-//! Thus, `structstruck` allows to use inner attributes instead and automatically transforms them to outer attributes
+//! Thus, `structstruck` allows to use inner attributes at the start of the struct declarations and automatically transforms them to outer attributes
 //! ```no_run
 //! structstruck::strike! {
 //!     struct Outer {
