@@ -201,7 +201,7 @@
 //!
 //! ### Missing features, limitations
 //!  * You can't exclude subtrees from `#[strikethrough[…]]`.
-//!  * Generic parameter constraints need to be repeated for each structs.
+//!  * Generic parameter constraints need to be repeated for each struct.
 //!  * Usage error handling is minimal, e.g.:
 //!  * No protection against using the name of a field twice as the name of a struct,  
 //!    e.g. with `foo: Result<struct {…}, struct {…}>,`
