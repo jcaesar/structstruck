@@ -37,6 +37,7 @@ fn stream_span(input: impl Iterator<Item = impl Deref<Target = TokenTree>>) -> O
 pub(crate) fn recurse_through_definition(
     input: TokenStream,
     mut strike_attrs: Vec<Attribute>,
+    make_pub: bool,
     ret: &mut TokenStream,
 ) {
     let span = stream_span(input.clone().into_iter().map(Cow::Owned));
@@ -53,6 +54,9 @@ pub(crate) fn recurse_through_definition(
         Declaration::Struct(s) => {
             strike_through_attributes(&mut s.attributes, &mut strike_attrs, ret);
             recurse_through_struct_fields(&mut s.fields, &strike_attrs, ret, &None);
+            if make_pub {
+                s.vis_marker.get_or_insert_with(make_pub_marker);
+            }
         }
         Declaration::Enum(e) => {
             strike_through_attributes(&mut e.attributes, &mut strike_attrs, ret);
@@ -63,6 +67,9 @@ pub(crate) fn recurse_through_definition(
                     ret,
                     &Some(v.name.clone()),
                 );
+            }
+            if make_pub {
+                e.vis_marker.get_or_insert_with(make_pub_marker);
             }
         }
         _ => {
@@ -81,6 +88,23 @@ pub(crate) fn recurse_through_definition(
         }
     }
     parsed.to_tokens(ret);
+}
+
+pub(crate) fn make_pub_marker() -> venial::VisMarker {
+    venial::VisMarker {
+        tk_token1: TokenTree::Ident(Ident::new("pub", Span::mixed_site())),
+        tk_token2: None,
+    }
+}
+
+pub(crate) fn is_plain_pub(vis_marker: &Option<venial::VisMarker>) -> bool {
+    match vis_marker {
+        Some(venial::VisMarker {
+            tk_token1: TokenTree::Ident(i),
+            tk_token2: None,
+        }) if i.to_string() == "pub" => true,
+        _ => false,
+    }
 }
 
 fn move_out_inner_attrs(input: TokenStream) -> TokenStream {
@@ -142,6 +166,7 @@ fn recurse_through_struct_fields(
                     strike_attrs,
                     ret,
                     &Some(name_hint),
+                    is_plain_pub(&field.vis_marker),
                     &mut field.ty.tokens,
                 );
             }
@@ -181,6 +206,7 @@ fn recurse_through_struct_fields(
                     strike_attrs,
                     ret,
                     name_hint,
+                    is_plain_pub(&field.vis_marker),
                     &mut field.ty.tokens,
                 );
             }
@@ -226,6 +252,7 @@ fn recurse_through_type_list(
     strike_attrs: &[Attribute],
     ret: &mut TokenStream,
     name_hint: &Option<Ident>,
+    pub_hint: bool,
     type_ret: &mut Vec<TokenTree>,
 ) {
     let mut tok = tok;
@@ -234,7 +261,7 @@ fn recurse_through_type_list(
             |t| matches!(t, TypeTree::Token(TokenTree::Punct(comma)) if comma.as_char() == ','),
         );
         let current = &tok[..end.unwrap_or(tok.len())];
-        recurse_through_type(current, strike_attrs, ret, name_hint, type_ret);
+        recurse_through_type(current, strike_attrs, ret, name_hint, pub_hint, type_ret);
         if let Some(comma) = end {
             type_ret.push(match tok[comma] {
                 TypeTree::Token(comma) => comma.clone(),
@@ -251,6 +278,7 @@ fn recurse_through_type(
     strike_attrs: &[Attribute],
     ret: &mut TokenStream,
     name_hint: &Option<Ident>,
+    pub_hint: bool,
     type_ret: &mut Vec<TokenTree>,
 ) {
     let kw = tok
@@ -265,7 +293,12 @@ fn recurse_through_type(
             .unwrap();
         if let Some(name @ TokenTree::Ident(_)) = decl.get(pos + 1) {
             type_ret.push(name.clone());
-            recurse_through_definition(decl.into_iter().collect(), strike_attrs.to_vec(), ret);
+            recurse_through_definition(
+                decl.into_iter().collect(),
+                strike_attrs.to_vec(),
+                pub_hint,
+                ret,
+            );
         } else {
             let name = match name_hint {
                 Some(name) => TokenTree::Ident(name.clone()),
@@ -281,12 +314,12 @@ fn recurse_through_type(
             let tail = decl.drain((pos + 1)..).collect::<TokenStream>();
             let head = decl.into_iter().collect::<TokenStream>();
             let newthing = quote! {#head #name #tail};
-            recurse_through_definition(newthing, strike_attrs.to_vec(), ret);
+            recurse_through_definition(newthing, strike_attrs.to_vec(), pub_hint, ret);
             type_ret.push(name);
         }
     } else {
         un_type_tree(tok, type_ret, |g, type_ret| {
-            recurse_through_type_list(g, strike_attrs, ret, name_hint, type_ret)
+            recurse_through_type_list(g, strike_attrs, ret, name_hint, false, type_ret)
         });
     }
 }

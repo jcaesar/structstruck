@@ -200,7 +200,6 @@
 //! ```
 //!
 //! ### Missing features, limitations
-//!  * Public fields don't automatically make their structs public.
 //!  * You can't exclude subtrees from `#[strikethrough[…]]`.
 //!  * Generic parameter constraints need to be repeated for each structs.
 //!  * Usage error handling is minimal, e.g.:
@@ -223,6 +222,6 @@ mod test;
 #[proc_macro]
 pub fn strike(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut ret = Default::default();
-    imp::recurse_through_definition(item.into(), vec![], &mut ret);
+    imp::recurse_through_definition(item.into(), vec![], false, &mut ret);
     ret.into()
 }

@@ -4,7 +4,7 @@ use quote::quote;
 
 fn check(nested: proc_macro2::TokenStream, planexpected: proc_macro2::TokenStream) {
     let mut plan = proc_macro2::TokenStream::new();
-    recurse_through_definition(nested, vec![], &mut plan);
+    recurse_through_definition(nested, vec![], false, &mut plan);
     // No Eq implementations. :/
     assert_eq!(plan.to_string(), planexpected.to_string());
 }
@@ -70,6 +70,31 @@ fn explicit_pub() {
     check(from, out);
 }
 
+/// If the field is pub, its type must also be
+///
+/// (But only if it's fully pub. pub(crate) e.g. doesn't require anything.)
+#[test]
+fn implicit_pub() {
+    let from = quote! {
+        struct Parent {
+            pub pub_to_none: struct {},
+            pub(crate) pub_crate_ign: struct {},
+            pub no_overwrite: pub(crate) struct {},
+        }
+    };
+    let out = quote! {
+        pub struct PubToNone {}
+        struct PubCrateIgn {}
+        pub(crate) struct NoOverwrite {}
+        struct Parent {
+            pub pub_to_none: PubToNone,
+            pub(crate) pub_crate_ign: PubCrateIgn,
+            pub no_overwrite: NoOverwrite,
+        }
+    };
+    check(from, out);
+}
+
 #[test]
 fn in_generics() {
     let from = quote! {
@@ -111,7 +136,7 @@ fn unsupported_union() {
         union Foo { }
     };
     let mut to = TokenStream::new();
-    recurse_through_definition(from, vec![], &mut to);
+    recurse_through_definition(from, vec![], false, &mut to);
     assert!(to.clone().into_iter().any(|tok| match tok {
         TokenTree::Ident(id) => id == "compile_error",
         _ => false,
@@ -229,7 +254,7 @@ fn raw_identifier_panic_bug() {
             r#type: () // This was actually enough for a segfault
         };
     };
-    recurse_through_definition(plain, vec![], &mut proc_macro2::TokenStream::new());
+    recurse_through_definition(plain, vec![], false, &mut proc_macro2::TokenStream::new());
 }
 
 #[test]
@@ -395,7 +420,7 @@ fn inner_comment_as_in_doc() {
         }
     };
     let mut rout = Default::default();
-    recurse_through_definition(out, vec![], &mut rout);
+    recurse_through_definition(out, vec![], false, &mut rout);
     check(from, rout);
 }
 
@@ -406,8 +431,14 @@ fn strikethrough_weird() {
         struct struct { }
     };
     let mut rout = Default::default();
-    recurse_through_definition(out, vec![], &mut rout);
+    recurse_through_definition(out, vec![], false, &mut rout);
     assert!(rout
         .into_iter()
         .any(|t| matches!(t, TokenTree::Ident(kw) if kw == "compile_error")));
+}
+
+#[test]
+fn pub_markers_sane() {
+    use crate::imp::*;
+    assert!(is_plain_pub(&Some(make_pub_marker())))
 }
