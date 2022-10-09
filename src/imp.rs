@@ -11,6 +11,7 @@ use quote::quote;
 use quote::quote_spanned;
 use quote::ToTokens;
 use std::borrow::Cow;
+use std::iter::once;
 use std::mem;
 use std::ops::Deref;
 use venial::parse_declaration;
@@ -406,4 +407,21 @@ fn report_error(span: Option<Span>, ret: &mut TokenStream, error: &str) {
         }
         None => panic!("{}", error),
     }
+}
+
+pub fn flatten_empty_groups(ts: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+    ts.into_iter()
+        .flat_map(|tt| match tt {
+            proc_macro2::TokenTree::Group(g) if g.delimiter() == proc_macro2::Delimiter::None => {
+                flatten_empty_groups(g.stream())
+            }
+            proc_macro2::TokenTree::Group(group) => {
+                let inner = flatten_empty_groups(group.stream());
+                let mut ngroup = proc_macro2::Group::new(group.delimiter(), inner);
+                ngroup.set_span(group.span());
+                once(proc_macro2::TokenTree::Group(ngroup)).collect()
+            }
+            x => once(x).collect(),
+        })
+        .collect()
 }

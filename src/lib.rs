@@ -222,6 +222,7 @@ mod test;
 #[proc_macro]
 pub fn strike(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut ret = Default::default();
-    imp::recurse_through_definition(item.into(), vec![], false, &mut ret);
+    let item = imp::flatten_empty_groups(item.into());
+    imp::recurse_through_definition(item, vec![], false, &mut ret);
     ret.into()
 }
