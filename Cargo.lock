@@ -28,7 +28,7 @@ dependencies = [
 
 [[package]]
 name = "structstruck"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "heck",
  "proc-macro2",

@@ -306,7 +306,7 @@ fn generics_on_def() {
     let out = quote! {
         struct Unnamed < T > { t : T }
         struct Named < T > { t : T }
-        struct Outer { unnamed : Unnamed , whatev : Named , }
+        struct Outer { unnamed : Unnamed <T> , whatev : Named <T> , }
     };
     check(from, out);
 }
@@ -441,4 +441,27 @@ fn strikethrough_weird() {
 fn pub_markers_sane() {
     use crate::imp::*;
     assert!(is_plain_pub(&Some(make_pub_marker())))
+}
+
+#[test]
+fn issue_2() {
+    let from = quote! {
+        pub enum Expr<'src> {
+            Binary(struct<'src> {
+                 left: Box<Expr<'src>>,
+                 operator: BinaryOp,
+                 right: Box<Expr<'src>>,
+            }),
+            Literal(enum<'src> {
+                StringLit(&'src str),
+                NumLit(&'src str),
+            }),
+        }
+    };
+    let out = quote! {
+        struct Binary < 'src > { left : Box < Expr < 'src >> , operator : BinaryOp , right : Box < Expr < 'src >> , }
+        enum Literal < 'src > { StringLit (& 'src str) , NumLit (& 'src str) , }
+        pub enum Expr < 'src > { Binary (Binary<'src>) , Literal (Literal<'src>) , }
+    };
+    check(from, out)
 }

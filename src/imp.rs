@@ -18,6 +18,8 @@ use venial::parse_declaration;
 use venial::Attribute;
 use venial::AttributeValue;
 use venial::Declaration;
+use venial::GenericParam;
+use venial::GenericParamList;
 use venial::StructFields;
 
 fn stream_span(input: impl Iterator<Item = impl Deref<Target = TokenTree>>) -> Option<Span> {
@@ -40,7 +42,7 @@ pub(crate) fn recurse_through_definition(
     mut strike_attrs: Vec<Attribute>,
     make_pub: bool,
     ret: &mut TokenStream,
-) {
+) -> Option<GenericParamList> {
     let span = stream_span(input.clone().into_iter().map(Cow::Owned));
     let input = move_out_inner_attrs(input);
     let mut parsed = match parse_declaration(input) {
@@ -48,7 +50,7 @@ pub(crate) fn recurse_through_definition(
         Err(e) => {
             // Sadly, venial still panics on invalid syntax
             report_error(span, ret, &format!("{}", e));
-            return;
+            return None;
         }
     };
     match &mut parsed {
@@ -74,11 +76,12 @@ pub(crate) fn recurse_through_definition(
             }
         }
         _ => {
-            return report_error(
+            report_error(
                 span,
                 ret,
                 "Unsupported declaration (only struct and enum are allowed)",
             );
+            return None;
         }
     }
     if let Declaration::Struct(s) = &mut parsed {
@@ -89,6 +92,7 @@ pub(crate) fn recurse_through_definition(
         }
     }
     parsed.to_tokens(ret);
+    parsed.generic_params().cloned()
 }
 
 pub(crate) fn make_pub_marker() -> venial::VisMarker {
@@ -292,14 +296,14 @@ fn recurse_through_type(
             .iter()
             .position(|t| matches!(t, TokenTree::Ident(kw) if is_decl_kw(kw)))
             .unwrap();
-        if let Some(name @ TokenTree::Ident(_)) = decl.get(pos + 1) {
+        let generics = if let Some(name @ TokenTree::Ident(_)) = decl.get(pos + 1) {
             type_ret.push(name.clone());
             recurse_through_definition(
                 decl.into_iter().collect(),
                 strike_attrs.to_vec(),
                 pub_hint,
                 ret,
-            );
+            )
         } else {
             let name = match name_hint {
                 Some(name) => TokenTree::Ident(name.clone()),
@@ -315,8 +319,27 @@ fn recurse_through_type(
             let tail = decl.drain((pos + 1)..).collect::<TokenStream>();
             let head = decl.into_iter().collect::<TokenStream>();
             let newthing = quote! {#head #name #tail};
-            recurse_through_definition(newthing, strike_attrs.to_vec(), pub_hint, ret);
+            let generics =
+                recurse_through_definition(newthing, strike_attrs.to_vec(), pub_hint, ret);
+
             type_ret.push(name);
+            generics
+        };
+        if let Some(generics) = generics {
+            type_ret.push(generics.tk_l_bracket.into());
+            let mut gp = generics.params.clone();
+            gp.iter_mut().for_each(|(gp, _)| {
+                *gp = GenericParam {
+                    name: gp.name.clone(),
+                    tk_prefix: gp
+                        .tk_prefix
+                        .clone()
+                        .filter(|pfx| matches!(pfx, TokenTree::Punct(_))),
+                    bound: None,
+                }
+            });
+            type_ret.extend(gp.into_token_stream());
+            type_ret.push(generics.tk_r_bracket.into());
         }
     } else {
         un_type_tree(tok, type_ret, |g, type_ret| {
