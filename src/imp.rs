@@ -56,7 +56,7 @@ pub(crate) fn recurse_through_definition(
     match &mut parsed {
         Declaration::Struct(s) => {
             strike_through_attributes(&mut s.attributes, &mut strike_attrs, ret);
-            recurse_through_struct_fields(&mut s.fields, &strike_attrs, ret, &None);
+            recurse_through_struct_fields(&mut s.fields, &strike_attrs, ret, &None, false);
             if make_pub {
                 s.vis_marker.get_or_insert_with(make_pub_marker);
             }
@@ -69,6 +69,7 @@ pub(crate) fn recurse_through_definition(
                     &strike_attrs,
                     ret,
                     &Some(v.name.clone()),
+                    is_plain_pub(&e.vis_marker),
                 );
             }
             if make_pub {
@@ -155,6 +156,7 @@ fn recurse_through_struct_fields(
     strike_attrs: &[Attribute],
     ret: &mut TokenStream,
     name_hint: &Option<Ident>,
+    in_pub_enum: bool,
 ) {
     match fields {
         StructFields::Named(n) => {
@@ -171,7 +173,7 @@ fn recurse_through_struct_fields(
                     strike_attrs,
                     ret,
                     &Some(name_hint),
-                    is_plain_pub(&field.vis_marker),
+                    is_plain_pub(&field.vis_marker) || in_pub_enum,
                     &mut field.ty.tokens,
                 );
             }
@@ -211,7 +213,7 @@ fn recurse_through_struct_fields(
                     strike_attrs,
                     ret,
                     name_hint,
-                    is_plain_pub(&field.vis_marker),
+                    is_plain_pub(&field.vis_marker) || in_pub_enum,
                     &mut field.ty.tokens,
                 );
             }

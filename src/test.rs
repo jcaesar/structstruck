@@ -446,7 +446,7 @@ fn pub_markers_sane() {
 #[test]
 fn issue_2() {
     let from = quote! {
-        pub enum Expr<'src> {
+        enum Expr<'src> {
             Binary(struct<'src> {
                  left: Box<Expr<'src>>,
                  operator: BinaryOp,
@@ -461,7 +461,26 @@ fn issue_2() {
     let out = quote! {
         struct Binary < 'src > { left : Box < Expr < 'src >> , operator : BinaryOp , right : Box < Expr < 'src >> , }
         enum Literal < 'src > { StringLit (& 'src str) , NumLit (& 'src str) , }
-        pub enum Expr < 'src > { Binary (Binary<'src>) , Literal (Literal<'src>) , }
+        enum Expr < 'src > { Binary (Binary<'src>) , Literal (Literal<'src>) , }
     };
     check(from, out)
+}
+
+#[test]
+fn pub_enum_autopubs() {
+    let from = quote! {
+        pub enum Outer {
+            An(struct ()),
+            Ny(struct {}),
+        };
+    };
+    let out = quote! {
+        pub struct An ();
+        pub struct Ny {}
+        pub enum Outer {
+            An(An),
+            Ny(Ny),
+        }
+    };
+    check(from, out);
 }
