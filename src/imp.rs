@@ -251,7 +251,8 @@ fn strike_through_attributes(
             true
         }
     });
-    dec_attrs.extend_from_slice(&strike_attrs[..]);
+
+    strike_attrs.iter().for_each(|attr| dec_attrs.insert(0, attr.clone()));
 }
 
 fn recurse_through_type_list(
