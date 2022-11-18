@@ -254,16 +254,15 @@ fn strike_through_attributes(
 
     let (mut derive_attrs, rest_attrs) =
         strike_attrs
-        .iter()
-        .fold((Vec::new(), Vec::new()),
-              | (mut der, mut rest), i| {
-                  if matches!(&i.path[0], TokenTree::Ident(token) if token == "derive") {
-                      der.push(i.clone());
-                  } else {
-                      rest.push(i.clone());
-                  }
-                  (der, rest)
-        });
+            .iter()
+            .fold((Vec::new(), Vec::new()), |(mut der, mut rest), i| {
+                if matches!(&i.path[0], TokenTree::Ident(token) if token == "derive") {
+                    der.push(i.clone());
+                } else {
+                    rest.push(i.clone());
+                }
+                (der, rest)
+            });
 
     // place other attrs after the existing ones
     dec_attrs.extend_from_slice(&rest_attrs[..]);
@@ -272,7 +271,6 @@ fn strike_through_attributes(
     derive_attrs
         .drain(..)
         .for_each(|attr| dec_attrs.insert(0, attr));
-
 }
 
 fn recurse_through_type_list(
