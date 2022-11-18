@@ -12,6 +12,7 @@ fn check(nested: proc_macro2::TokenStream, planexpected: proc_macro2::TokenStrea
 #[test]
 fn strikethrough_derive() {
     let from = quote! {
+        #[strikethrough[striked_attr]]
         #[strikethrough[derive(Debug, Default, PartialEq)]]
         #[gubbel]
         struct Parent {
@@ -22,19 +23,23 @@ fn strikethrough_derive() {
             e: u32,
         }
     };
+
     let out = quote! {
         #[derive(Debug, Default, PartialEq)]
+        #[striked_attr]
         struct Shared {
             d: i32
         }
-        #[gobbel]
         #[derive(Debug, Default, PartialEq)]
+        #[gobbel]
+        #[striked_attr]
         struct A {
             b: Shared,
             c: Shared,
         }
-        #[gubbel]
         #[derive(Debug, Default, PartialEq)]
+        #[gubbel]
+        #[striked_attr]
         struct Parent {
             a: A,
             e: u32,
