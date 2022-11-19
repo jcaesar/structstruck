@@ -25,21 +25,21 @@ fn strikethrough_derive() {
     };
 
     let out = quote! {
-        #[derive(Debug, Default, PartialEq)]
         #[striked_attr]
+        #[derive(Debug, Default, PartialEq)]
         struct Shared {
             d: i32
         }
+        #[striked_attr]
         #[derive(Debug, Default, PartialEq)]
         #[gobbel]
-        #[striked_attr]
         struct A {
             b: Shared,
             c: Shared,
         }
+        #[striked_attr]
         #[derive(Debug, Default, PartialEq)]
         #[gubbel]
-        #[striked_attr]
         struct Parent {
             a: A,
             e: u32,
