@@ -289,10 +289,25 @@ fn recurse_through_type(
     pub_hint: bool,
     type_ret: &mut Vec<TokenTree>,
 ) {
-    let kw = tok
-        .iter()
-        .any(|t| matches!(t, TypeTree::Token(TokenTree::Ident(kw)) if is_decl_kw(kw)));
-    if kw {
+    if let Some(c) = tok.iter().find_map(|t| match t {
+        TypeTree::Token(TokenTree::Punct(p)) if p.as_char() == ':' => Some(p),
+        _ => None,
+    }) {
+        report_error(
+            Some(c.span()),
+            ret,
+            "Colon in top level of type expression. Did you forget a comma somewhere?",
+        );
+    }
+    let kw = tok.iter().position(|t| get_decl_ident(t).is_some());
+    if let Some(kw) = kw {
+        if let Some(dup) = tok[kw + 1..].iter().find_map(get_decl_ident) {
+            report_error(
+                Some(dup.span()),
+                ret,
+                "More than one struct/enum/.. declaration found",
+            );
+        }
         let mut decl = Vec::new();
         un_tree_type(tok, &mut decl);
         let pos = decl
@@ -348,6 +363,13 @@ fn recurse_through_type(
         un_type_tree(tok, type_ret, |g, type_ret| {
             recurse_through_type_list(g, strike_attrs, ret, name_hint, false, type_ret)
         });
+    }
+}
+
+fn get_decl_ident<'a>(t: &'a TypeTree) -> Option<&'a Ident> {
+    match t {
+        TypeTree::Token(TokenTree::Ident(ref kw)) if is_decl_kw(kw) => Some(kw),
+        _ => None,
     }
 }
 

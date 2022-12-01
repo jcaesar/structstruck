@@ -489,3 +489,61 @@ fn pub_enum_autopubs() {
     };
     check(from, out);
 }
+
+#[test]
+fn missing_comma_issue4() {
+    let from = quote! {
+        struct Incorrect {
+            eater: struct {
+                stomach: (),
+            } // notice the missing comma
+            eaten: struct {
+                apple: bool,
+            }
+        }
+    };
+    let mut to = TokenStream::new();
+    recurse_through_definition(from, vec![], false, &mut to);
+    assert!(to.clone().into_iter().any(|tok| match tok {
+        TokenTree::Ident(id) => id == "compile_error",
+        _ => false,
+    }));
+}
+
+#[test]
+/// TODO
+fn not_quite_fixed_issue4() {
+    let from = quote! {
+        struct Incorrect {
+            eater: struct {
+                stomach: (),
+            } // notice the missing comma
+            you can still put arbitrary junk here and venial will ignore it ;(
+            ! ) 42
+        }
+    };
+    let out = quote! {
+        struct Eater {
+            stomach: (),
+        }
+        struct Incorrect {
+            eater: Eater
+        }
+    };
+    check(from, out);
+}
+
+#[test]
+fn issue4_variant() {
+    let from = quote! {
+        struct Incorrect {
+            uff: Result<struct {} struct {}>
+        }
+    };
+    let mut to = TokenStream::new();
+    recurse_through_definition(from, vec![], false, &mut to);
+    assert!(to.clone().into_iter().any(|tok| match tok {
+        TokenTree::Ident(id) => id == "compile_error",
+        _ => false,
+    }));
+}
