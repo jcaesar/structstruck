@@ -153,23 +153,6 @@ fn in_generics() {
 }
 
 #[test]
-fn unsupported_union() {
-    let from = quote! {
-        union Foo { }
-    };
-    let mut to = TokenStream::new();
-    recurse_through_definition(from, vec![], false, &mut to);
-    assert!(to.clone().into_iter().any(|tok| match tok {
-        TokenTree::Ident(id) => id == "compile_error",
-        _ => false,
-    }));
-    //assert!(to.clone().into_iter().any(|tok| match tok {
-    //    TokenTree::Literal(lit) => lit.to_string().contains("unsupported"),
-    //    _ => false,
-    //}));
-}
-
-#[test]
 fn enum_named() {
     let from = quote! {
         enum Parent {
@@ -563,4 +546,35 @@ fn issue4_variant() {
         TokenTree::Ident(id) => id == "compile_error",
         _ => false,
     }));
+}
+
+#[test]
+fn issue5_unions() {
+    let from = quote! {
+        struct x_thing {
+            a: union {
+                value: u32,
+                b: struct {
+                    thing_a: TypeA,
+                    thing_b: TypeB,
+                },
+            },
+            some_data: [char; 123],
+        }
+    };
+    let out = quote! {
+        struct B {
+            thing_a: TypeA,
+            thing_b: TypeB,
+        }
+        union A {
+            value: u32,
+            b: B,
+        }
+        struct x_thing {
+            a: A,
+            some_data: [char; 123],
+        }
+    };
+    check(from, out);
 }

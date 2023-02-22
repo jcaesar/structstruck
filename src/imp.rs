@@ -76,11 +76,18 @@ pub(crate) fn recurse_through_definition(
                 e.vis_marker.get_or_insert_with(make_pub_marker);
             }
         }
+        Declaration::Union(u) => {
+            strike_through_attributes(&mut u.attributes, &mut strike_attrs, ret);
+            named_struct_fields(&mut u.fields, &strike_attrs, ret, false);
+            if make_pub {
+                u.vis_marker.get_or_insert_with(make_pub_marker);
+            }
+        }
         _ => {
             report_error(
                 span,
                 ret,
-                "Unsupported declaration (only struct and enum are allowed)",
+                "Unsupported declaration (only struct, enum, and union are allowed)",
             );
             return None;
         }
@@ -159,65 +166,80 @@ fn recurse_through_struct_fields(
     in_pub_enum: bool,
 ) {
     match fields {
-        StructFields::Named(n) => {
-            for (field, _) in &mut n.fields.iter_mut() {
-                let name_hint = field.name.to_string();
-                let name_hint = match name_hint.starts_with("r#") {
-                    true => &name_hint[2..],
-                    false => &name_hint,
-                };
-                let name_hint = Ident::new(&name_hint.to_pascal_case(), field.name.span());
-                let ttok = mem::take(&mut field.ty.tokens);
-                recurse_through_type_list(
-                    &type_tree(&ttok, ret),
-                    strike_attrs,
-                    ret,
-                    &Some(name_hint),
-                    is_plain_pub(&field.vis_marker) || in_pub_enum,
-                    &mut field.ty.tokens,
-                );
-            }
-        }
         StructFields::Unit => (),
-        StructFields::Tuple(t) => {
-            for (field, _) in &mut t.fields.iter_mut() {
-                let ttok = mem::take(&mut field.ty.tokens);
-                let ttok = type_tree(&ttok, ret);
+        StructFields::Named(n) => named_struct_fields(n, strike_attrs, ret, in_pub_enum),
+        StructFields::Tuple(t) => tuple_struct_fields(t, strike_attrs, ret, name_hint, in_pub_enum),
+    }
+}
 
-                // Slight hack for tuple structs:
-                // struct Foo(pub struct Bar()); is ambigous:
-                // Which does the pub belong to, Bar or Foo::0?
-                // I'd say Bar, but venial parses the pub as the visibility specifier of the current struct field
-                // So, transfer the visibility specifier to the declaration token stream, but only if there isn't already one:
-                // I also don't want to break struct Foo(pub pub struct Bar()); (both Bar and Foo::0 public)
-                let vtok;
-                let ttok = match ttok
-                    .iter()
-                    .any(|t| matches!(t, TypeTree::Token(TokenTree::Ident(kw)) if kw == "pub"))
-                {
-                    true => ttok,
-                    false => match mem::take(&mut field.vis_marker) {
-                        Some(vis) => {
-                            vtok = vis.into_token_stream().into_iter().collect::<Vec<_>>();
-                            vtok.iter()
-                                .map(TypeTree::Token)
-                                .chain(ttok.into_iter())
-                                .collect()
-                        }
-                        None => ttok,
-                    },
-                };
+fn named_struct_fields(
+    n: &mut venial::NamedStructFields,
+    strike_attrs: &[Attribute],
+    ret: &mut TokenStream,
+    in_pub_enum: bool,
+) {
+    for (field, _) in &mut n.fields.iter_mut() {
+        let name_hint = field.name.to_string();
+        let name_hint = match name_hint.starts_with("r#") {
+            true => &name_hint[2..],
+            false => &name_hint,
+        };
+        let name_hint = Ident::new(&name_hint.to_pascal_case(), field.name.span());
+        let ttok = mem::take(&mut field.ty.tokens);
+        recurse_through_type_list(
+            &type_tree(&ttok, ret),
+            strike_attrs,
+            ret,
+            &Some(name_hint),
+            is_plain_pub(&field.vis_marker) || in_pub_enum,
+            &mut field.ty.tokens,
+        );
+    }
+}
 
-                recurse_through_type_list(
-                    &ttok,
-                    strike_attrs,
-                    ret,
-                    name_hint,
-                    is_plain_pub(&field.vis_marker) || in_pub_enum,
-                    &mut field.ty.tokens,
-                );
-            }
-        }
+fn tuple_struct_fields(
+    t: &mut venial::TupleStructFields,
+    strike_attrs: &[Attribute],
+    ret: &mut TokenStream,
+    name_hint: &Option<Ident>,
+    in_pub_enum: bool,
+) {
+    for (field, _) in &mut t.fields.iter_mut() {
+        let ttok = mem::take(&mut field.ty.tokens);
+        let ttok = type_tree(&ttok, ret);
+
+        // Slight hack for tuple structs:
+        // struct Foo(pub struct Bar()); is ambigous:
+        // Which does the pub belong to, Bar or Foo::0?
+        // I'd say Bar, but venial parses the pub as the visibility specifier of the current struct field
+        // So, transfer the visibility specifier to the declaration token stream, but only if there isn't already one:
+        // I also don't want to break struct Foo(pub pub struct Bar()); (both Bar and Foo::0 public)
+        let vtok;
+        let ttok = match ttok
+            .iter()
+            .any(|t| matches!(t, TypeTree::Token(TokenTree::Ident(kw)) if kw == "pub"))
+        {
+            true => ttok,
+            false => match mem::take(&mut field.vis_marker) {
+                Some(vis) => {
+                    vtok = vis.into_token_stream().into_iter().collect::<Vec<_>>();
+                    vtok.iter()
+                        .map(TypeTree::Token)
+                        .chain(ttok.into_iter())
+                        .collect()
+                }
+                None => ttok,
+            },
+        };
+
+        recurse_through_type_list(
+            &ttok,
+            strike_attrs,
+            ret,
+            name_hint,
+            is_plain_pub(&field.vis_marker) || in_pub_enum,
+            &mut field.ty.tokens,
+        );
     }
 }
 
