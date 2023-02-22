@@ -13,10 +13,10 @@ repository = "https://github.com/jcaesar/structstruck"
 proc-macro = true
 
 [dependencies]
-heck = "0.4.0"
-proc-macro2 = "1.0.37"
-quote = "1.0.17"
-venial = "0.4.0"
+heck = "0.4.1"
+proc-macro2 = "1.0.51"
+quote = "1.0.23"
+venial = "0.5.0"
 
 [dev-dependencies]
 prettyplease = "0.1.23"

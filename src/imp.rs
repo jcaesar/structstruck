@@ -231,7 +231,8 @@ fn strike_through_attributes(
             match &attr.value {
                 AttributeValue::Group(brackets, value) => {
                     strike_attrs.push(Attribute {
-                        tk_hashbang: attr.tk_hashbang.clone(),
+                        tk_bang: attr.tk_bang.clone(),
+                        tk_hash: attr.tk_hash.clone(),
                         tk_brackets: brackets.clone(),
                         // Hack a bit: Put all the tokens into the path.
                         path: value.to_vec(),
