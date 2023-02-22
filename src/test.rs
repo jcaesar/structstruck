@@ -2,11 +2,28 @@ use crate::imp::{recurse_through_definition, type_tree, TypeTree};
 use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 use quote::quote;
 
+fn pretty(plan: proc_macro2::TokenStream) -> String {
+    let planstr = plan.to_string();
+    let plan = &syn::parse_file(&planstr);
+    let plan = match plan {
+        Ok(plan) => plan,
+        Err(_) => return planstr,
+    };
+    prettyplease::unparse(plan)
+}
+
 fn check(nested: proc_macro2::TokenStream, planexpected: proc_macro2::TokenStream) {
     let mut plan = proc_macro2::TokenStream::new();
     recurse_through_definition(nested, vec![], false, &mut plan);
     // No Eq implementations. :/
-    assert_eq!(plan.to_string(), planexpected.to_string());
+    let plan = pretty(plan);
+    let planexpected = pretty(planexpected);
+    assert!(
+        plan == planexpected,
+        "\n  left: {}\n right: {}",
+        plan,
+        planexpected
+    );
 }
 
 #[test]
