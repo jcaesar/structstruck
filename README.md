@@ -27,7 +27,23 @@ struct Parent {
 This proc macro crate allows exactly that.
 Check the [docs](https://docs.rs/structstruck) on how exaclty.
 
-The original use case for this crate is to be able to conveniently write kubernetes custom resources with `kube`.
+For illustration, some more usecases:
+
+* an enum where every variant has its own struct, named exactly the same as the variant.
+```rust
+structstruck::strike! {
+    enum Token {
+        Identifier(struct {
+            name: String,
+        }),
+        Punctuation(struct {
+            character: char,
+        }),
+    }
+}
+```
+
+* my original use case: conveniently write kubernetes custom resources with `kube`.
 ```rust
 structstruck::strike! {
     #[strikethrough[derive(Deserialize, Serialize, Clone, Debug, Validate, JsonSchema)]]
@@ -75,16 +91,3 @@ structstruck::strike! {
 }
 ```
 
-Another pattern where this crate can be useful is an enum where every variant has its own struct, named exactly the same as the variant.
-```rust
-structstruck::strike! {
-    enum Token {
-        Identifier(struct {
-            name: String,
-        }),
-        Punctuation(struct {
-            character: char,
-        }),
-    }
-}
-```
