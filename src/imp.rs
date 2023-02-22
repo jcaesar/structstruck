@@ -10,7 +10,6 @@ use proc_macro2::TokenTree;
 use quote::quote;
 use quote::quote_spanned;
 use quote::ToTokens;
-use std::borrow::Cow;
 use std::iter::once;
 use std::mem;
 use std::ops::Deref;
@@ -43,7 +42,9 @@ pub(crate) fn recurse_through_definition(
     make_pub: bool,
     ret: &mut TokenStream,
 ) -> Option<GenericParamList> {
-    let span = stream_span(input.clone().into_iter().map(Cow::Owned));
+    let input_vec = input.into_iter().collect::<Vec<TokenTree>>();
+    let span = stream_span(input_vec.iter());
+    let input = hack_append_type_decl_semicolon(input_vec);
     let input = move_out_inner_attrs(input);
     let mut parsed = match parse_declaration(input) {
         Ok(parsed) => parsed,
@@ -83,6 +84,21 @@ pub(crate) fn recurse_through_definition(
                 u.vis_marker.get_or_insert_with(make_pub_marker);
             }
         }
+        Declaration::TyDefinition(t) => {
+            strike_through_attributes(&mut t.attributes, &mut strike_attrs, ret);
+            let ttok = mem::take(&mut t.initializer_ty.tokens);
+            recurse_through_type_list(
+                &type_tree(&ttok, ret),
+                &strike_attrs,
+                ret,
+                &None,
+                false,
+                &mut t.initializer_ty.tokens,
+            );
+            if make_pub {
+                t.vis_marker.get_or_insert_with(make_pub_marker);
+            }
+        }
         _ => {
             report_error(
                 span,
@@ -101,6 +117,24 @@ pub(crate) fn recurse_through_definition(
     }
     parsed.to_tokens(ret);
     parsed.generic_params().cloned()
+}
+
+fn hack_append_type_decl_semicolon(input_vec: Vec<TokenTree>) -> TokenStream {
+    let is_type_decl = input_vec
+        .iter()
+        .any(|t| matches!(t, TokenTree::Ident(kw) if kw == "type"))
+        && input_vec.iter().all(|t| {
+            matches!(t, TokenTree::Ident(kw) if kw == "type")
+                || !matches!(t, TokenTree::Ident(kw) if is_decl_kw(kw))
+        });
+    let input = match is_type_decl {
+        true => input_vec
+            .into_iter()
+            .chain(once(TokenTree::Punct(Punct::new(';', Spacing::Alone))))
+            .collect(),
+        false => input_vec.into_iter().collect(),
+    };
+    input
 }
 
 pub(crate) fn make_pub_marker() -> venial::VisMarker {

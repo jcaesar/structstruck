@@ -578,3 +578,19 @@ fn issue5_unions() {
     };
     check(from, out);
 }
+
+#[test]
+fn typedef() {
+    let from = quote! {
+        struct Thing {
+            foo: type = u32,
+        }
+    };
+    let out = quote! {
+        type Foo = u32;
+        struct Thing {
+            foo: Foo,
+        }
+    };
+    check(from, out);
+}
