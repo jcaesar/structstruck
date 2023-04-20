@@ -312,6 +312,13 @@ fn strike_through_attributes(
     dec_attrs.splice(0..0, strike_attrs.iter().cloned());
 }
 
+fn get_tt_punct<'t>(t: &'t TypeTree<'t>, c: char) -> Option<&'t Punct> {
+    match t {
+        TypeTree::Token(TokenTree::Punct(p)) if p.as_char() == c => Some(p),
+        _ => None,
+    }
+}
+
 fn recurse_through_type_list(
     tok: &[TypeTree],
     strike_attrs: &[Attribute],
@@ -322,9 +329,7 @@ fn recurse_through_type_list(
 ) {
     let mut tok = tok;
     loop {
-        let end = tok.iter().position(
-            |t| matches!(t, TypeTree::Token(TokenTree::Punct(comma)) if comma.as_char() == ','),
-        );
+        let end = tok.iter().position(|t| get_tt_punct(t, ',').is_some());
         let current = &tok[..end.unwrap_or(tok.len())];
         recurse_through_type(current, strike_attrs, ret, name_hint, pub_hint, type_ret);
         if let Some(comma) = end {
@@ -346,9 +351,12 @@ fn recurse_through_type(
     pub_hint: bool,
     type_ret: &mut Vec<TokenTree>,
 ) {
-    if let Some(c) = tok.iter().find_map(|t| match t {
-        TypeTree::Token(TokenTree::Punct(p)) if p.as_char() == ':' => Some(p),
-        _ => None,
+    if let Some(c) = tok.windows(3).find_map(|t| {
+        get_tt_punct(&t[0], ':')
+            .or(get_tt_punct(&t[2], ':'))
+            .is_none()
+            .then(|| get_tt_punct(&t[1], ':'))
+            .flatten()
     }) {
         report_error(
             Some(c.span()),

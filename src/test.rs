@@ -594,3 +594,29 @@ fn typedef() {
     };
     check(from, out);
 }
+
+#[test]
+fn issue6_path() {
+    let from = quote! {
+        struct ItemDefine {
+            semantic_token: keywords::semantic,
+            ident: Ident,
+            semantic_fields: struct {
+                brace_token: token::Brace,
+                fields: Vec<SemanticField>,
+            }
+        }
+    };
+    let out = quote! {
+        struct SemanticFields {
+            brace_token: token::Brace,
+            fields: Vec<SemanticField>,
+        }
+        struct ItemDefine {
+            semantic_token: keywords::semantic,
+            ident: Ident,
+            semantic_fields: SemanticFields,
+        }
+    };
+    check(from, out);
+}
