@@ -282,8 +282,24 @@ fn strike_through_attributes(
     strike_attrs: &mut Vec<Attribute>,
     ret: &mut TokenStream,
 ) {
+    let mut nostrike = false;
+
     dec_attrs.retain(|attr| {
-        if matches!(&attr.path[..], [TokenTree::Ident(kw)] if kw == "strikethrough") {
+        if matches!(&attr.path[..], [TokenTree::Ident(kw)] if kw == "nostrike") {
+            match &attr.value {
+                AttributeValue::Empty => {
+                    nostrike = true;
+                },
+                _ => {
+                    report_error(
+                        stream_span(attr.get_value_tokens().iter()),
+                        ret,
+                        "#[nostrike] does not take parameters",
+                    );
+                }
+            }
+            false
+        } else if matches!(&attr.path[..], [TokenTree::Ident(kw)] if kw == "strikethrough") {
             match &attr.value {
                 AttributeValue::Group(brackets, value) => {
                     strike_attrs.push(Attribute {
@@ -309,7 +325,9 @@ fn strike_through_attributes(
         }
     });
 
-    dec_attrs.splice(0..0, strike_attrs.iter().cloned());
+    if !nostrike {
+        dec_attrs.splice(0..0, strike_attrs.iter().cloned());
+    }
 }
 
 fn get_tt_punct<'t>(t: &'t TypeTree<'t>, c: char) -> Option<&'t Punct> {
