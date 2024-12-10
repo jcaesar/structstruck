@@ -628,7 +628,268 @@ fn issue6_path() {
 }
 
 #[test]
-fn nested() {
+fn two_tuple_values() {
+    let from = quote! {
+        enum Parent {
+            Tuple(struct{b: u8}, struct{c: u8})
+        }
+    };
+    let out = quote! {
+        struct Tuple { b: u8 }
+        struct Tuple1 { c: u8 }
+        enum Parent {
+            Tuple(Tuple, Tuple1),
+        }
+    };
+    check(from, out);
+}
+
+//////////////////////////////////////////////////
+// some of the  tests again but with path names //
+//////////////////////////////////////////////////
+
+#[test]
+fn path_in_generics() {
+    let from = quote! {
+        #[structstruck::names_from_path]
+        struct Parent {
+            a: Option<struct {
+                c: u32,
+            }>,
+            b: Result<
+                struct Then {
+                    d: u64,
+                },
+                struct Else {
+                    e: u128,
+                },
+            >
+        }
+    };
+    let out = quote! {
+        struct ParentA {
+            c: u32,
+        }
+        struct Then {
+            d: u64,
+        }
+        struct Else {
+            e: u128,
+        }
+        struct Parent {
+            a: Option<ParentA>,
+            b: Result<Then, Else, >
+        }
+    };
+    check(from, out);
+}
+#[test]
+fn path_enum_named() {
+    let from = quote! {
+        #[structstruck::names_from_path]
+        enum Parent {
+            A {
+                a: enum { Foo { b: i8 } },
+                c: i16
+            }
+            B {}
+        }
+    };
+    let out = quote! {
+        enum ParentAA {
+            Foo { b: i8 }
+        }
+        enum Parent {
+            A { a: ParentAA, c: i16 },
+            B {}
+        }
+    };
+    check(from, out);
+}
+
+#[test]
+fn path_tupledec() {
+    let from = quote! {
+        #[structstruck::names_from_path]
+        struct Parent {
+            a: struct (i16),
+            b: struct (struct Bar { bar: i64 }),
+            c: enum { Foo(struct(i32))}
+        }
+    };
+    let out = quote! {
+        struct ParentA (i16);
+        struct Bar { bar: i64 }
+        struct ParentB (Bar);
+        struct ParentCFoo (i32);
+        enum ParentC { Foo (ParentCFoo) }
+        struct Parent { a : ParentA , b : ParentB , c : ParentC }
+    };
+    check(from, out);
+}
+
+#[test]
+fn path_raw_identifier_as_name() {
+    let from = quote! {
+        #[structstruck::names_from_path]
+        struct A { r#type: struct ()  };
+    };
+    let out = quote! {
+        struct AType();
+        struct A { r#type: AType }
+    };
+    check(from, out);
+}
+
+#[test]
+fn path_generics_on_def() {
+    let from = quote! {
+        #[structstruck::names_from_path]
+        struct Outer {
+            unnamed: struct<T>{t: T},
+            whatev: struct Named<T>{t: T},
+        };
+    };
+    let out = quote! {
+        struct OuterUnnamed < T > { t : T }
+        struct Named < T > { t : T }
+        struct Outer { unnamed : OuterUnnamed <T> , whatev : Named <T> , }
+    };
+    check(from, out);
+}
+
+#[test]
+fn path_pub_enum() {
+    let from = quote! {
+        #[structstruck::names_from_path]
+        enum Opts {
+            Login(pub struct {
+                hs: Url,
+            }),
+            Run(pub struct {
+                channel: Option<RoomId>,
+            }),
+        }
+    };
+    let out = quote! {
+        pub struct OptsLogin {
+            hs: Url,
+        }
+
+        pub struct OptsRun {
+            channel: Option<RoomId>,
+        }
+
+        enum Opts {
+            Login(OptsLogin),
+            Run(OptsRun),
+        }
+    };
+    check(from, out);
+}
+
+#[test]
+fn path_issue_2() {
+    let from = quote! {
+        #[structstruck::names_from_path]
+        enum Expr<'src> {
+            Binary(struct<'src> {
+                 left: Box<Expr<'src>>,
+                 operator: BinaryOp,
+                 right: Box<Expr<'src>>,
+            }),
+            Literal(enum<'src> {
+                StringLit(&'src str),
+                NumLit(&'src str),
+            }),
+        }
+    };
+    let out = quote! {
+        struct ExprBinary < 'src > { left : Box < Expr < 'src >> , operator : BinaryOp , right : Box < Expr < 'src >> , }
+        enum ExprLiteral < 'src > { StringLit (& 'src str) , NumLit (& 'src str) , }
+        enum Expr < 'src > { Binary (ExprBinary<'src>) , Literal (ExprLiteral<'src>) , }
+    };
+    check(from, out)
+}
+
+#[test]
+fn path_issue5_unions() {
+    let from = quote! {
+        #[structstruck::names_from_path]
+        struct x_thing {
+            a: union {
+                value: u32,
+                b: struct {
+                    thing_a: TypeA,
+                    thing_b: TypeB,
+                },
+            },
+            some_data: [char; 123],
+        }
+    };
+    let out = quote! {
+        struct XThingAB {
+            thing_a: TypeA,
+            thing_b: TypeB,
+        }
+        union XThingA {
+            value: u32,
+            b: XThingAB,
+        }
+        struct x_thing {
+            a: XThingA,
+            some_data: [char; 123],
+        }
+    };
+    check(from, out);
+}
+
+#[test]
+fn path_typedef() {
+    let from = quote! {
+        #[structstruck::names_from_path]
+        struct Thing {
+            foo: type = u32,
+        }
+    };
+    let out = quote! {
+        type ThingFoo = u32;
+        struct Thing {
+            foo: ThingFoo,
+        }
+    };
+    check(from, out);
+}
+
+#[test]
+fn path_issue6_path() {
+    let from = quote! {
+        #[structstruck::names_from_path]
+        struct ItemDefine {
+            semantic_token: keywords::semantic,
+            ident: Ident,
+            semantic_fields: struct {
+                brace_token: token::Brace,
+                fields: Vec<SemanticField>,
+            }
+        }
+    };
+    let out = quote! {
+        struct ItemDefineSemanticFields {
+            brace_token: token::Brace,
+            fields: Vec<SemanticField>,
+        }
+        struct ItemDefine {
+            semantic_token: keywords::semantic,
+            ident: Ident,
+            semantic_fields: ItemDefineSemanticFields,
+        }
+    };
+    check(from, out);
+}
+
+#[test]
+fn path_two_tuple_values() {
     let from = quote! {
         #[structstruck::names_from_path]
         struct Outer{
@@ -648,6 +909,107 @@ fn nested() {
         }
         struct Outer{
             inner: OuterInner
+        }
+    };
+    check(from, out);
+}
+
+#[test]
+fn nested() {
+    let from = quote! {
+        #[structstruck::names_from_path]
+        enum Parent {
+            Tuple(struct{b: u8}, struct{c: u8})
+        }
+    };
+    let out = quote! {
+        struct ParentTuple { b: u8 }
+        struct ParentTuple1 { c: u8 }
+        enum Parent {
+            Tuple(ParentTuple, ParentTuple1),
+        }
+    };
+    check(from, out);
+}
+/////////////////////////////////
+// Test added for path feature //
+/////////////////////////////////
+
+#[test]
+fn path_deep_nesting() {
+    let from = quote! {
+        #[structstruck::names_from_path]
+        struct A{
+            b: struct{
+                c: struct {
+                    d:()
+                }
+            }
+        }
+    };
+    let out = quote! {
+        struct ABC{
+            d: ()
+        }
+        struct AB{
+            c: ABC
+        }
+        struct A{
+            b: AB
+        }
+    };
+    check(from, out);
+}
+
+#[test]
+fn path_not_on_outermost() {
+    let from = quote! {
+        struct A {
+            b: struct {
+                #![structstruck::names_from_path]
+                c: struct {
+                    d:()
+                }
+            }
+        }
+    };
+    let out = quote! {
+        struct BC {
+            d: ()
+        }
+        struct B {
+            c: BC
+        }
+        struct A {
+            b: B
+        }
+    };
+    check(from, out);
+}
+
+#[test]
+fn path_break_middle() {
+    let from = quote! {
+        #[structstruck::names_from_path]
+        struct A {
+            b: struct {
+                c: struct X {
+                    d: struct {}
+                }
+            }
+        }
+    };
+    let out = quote! {
+        struct XD {
+        }
+        struct X {
+            d: XD
+        }
+        struct AB {
+            c: X
+        }
+        struct A {
+            b: AB
         }
     };
     check(from, out);
