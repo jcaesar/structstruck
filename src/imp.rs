@@ -36,13 +36,87 @@ fn stream_span(input: impl Iterator<Item = impl Deref<Target = TokenTree>>) -> O
     ret
 }
 
+#[derive(Default, Clone)]
+pub(crate) struct FieldPath {
+    enabled: bool,
+    path: Vec<String>,
+}
+impl FieldPath {
+    fn push(&mut self, s: &str) {
+        if self.enabled {
+            self.path.push(pascal_case(s));
+        } else {
+            self.path[0] = pascal_case(s);
+        }
+    }
+    fn pop(&mut self) {
+        if self.enabled {
+            self.path.pop();
+        }
+    }
+
+    fn enable_by_attr(&mut self, attributes: &mut Vec<Attribute>) {
+        attributes.retain(|attr| {
+            let attr_str = attr
+                .path
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect::<String>();
+            if attr_str == "structstruck::names_from_path" {
+                self.enabled = true;
+                false
+            } else {
+                true
+            }
+        });
+    }
+
+    fn clear(&mut self) {
+        self.path.clear();
+        if !self.enabled {
+            // if no path is used, push an empty string that gets replaced by the last path element
+            self.path.push(String::new());
+        }
+    }
+
+    fn get_name_hint(&self, num: Option<usize>, span: Span) -> Ident {
+        let mut name = self.path.join("");
+        if let Some(num) = num {
+            if num != 0 {
+                name.push_str(&num.to_string());
+            }
+        }
+        Ident::new(&name, span)
+    }
+}
+
+/// capitalizes the first letter of each word and the one after an underscore
+/// e.g. `foo_bar` -> `FooBar`
+/// this also keeps consecutive uppercase letters
+fn pascal_case(s: &str) -> String {
+    let mut ret = String::new();
+    let mut uppercase_next = true;
+    for c in s.chars() {
+        if c == '_' {
+            uppercase_next = true;
+        } else if uppercase_next {
+            ret.push(c.to_ascii_uppercase());
+            uppercase_next = false;
+        } else {
+            ret.push(c);
+        }
+    }
+    ret
+}
+
 pub(crate) fn recurse_through_definition(
     input: TokenStream,
     mut strike_attrs: Vec<Attribute>,
     make_pub: bool,
     ret: &mut TokenStream,
+    path: &mut FieldPath,
 ) -> Option<GenericParamList> {
-    let path = &mut vec![];
+    path.clear();
     let input_vec = input.into_iter().collect::<Vec<TokenTree>>();
     let span = stream_span(input_vec.iter());
     let input = hack_append_type_decl_semicolon(input_vec);
@@ -58,8 +132,16 @@ pub(crate) fn recurse_through_definition(
     match &mut parsed {
         Declaration::Struct(s) => {
             strike_through_attributes(&mut s.attributes, &mut strike_attrs, ret);
-            path.push(s.name.to_string());
-            recurse_through_struct_fields(&mut s.fields, &strike_attrs, ret, false, path);
+            path.enable_by_attr(&mut s.attributes);
+            path.push(&s.name.to_string());
+            recurse_through_struct_fields(
+                &mut s.fields,
+                &strike_attrs,
+                ret,
+                false,
+                path,
+                s.name.span(),
+            );
             path.pop();
             if make_pub {
                 s.vis_marker.get_or_insert_with(make_pub_marker);
@@ -67,15 +149,17 @@ pub(crate) fn recurse_through_definition(
         }
         Declaration::Enum(e) => {
             strike_through_attributes(&mut e.attributes, &mut strike_attrs, ret);
-            path.push(e.name.to_string());
+            path.enable_by_attr(&mut e.attributes);
+            path.push(&e.name.to_string());
             for (v, _) in &mut e.variants.iter_mut() {
-                path.push(v.name.to_string());
+                path.push(&v.name.to_string());
                 recurse_through_struct_fields(
                     &mut v.contents,
                     &strike_attrs,
                     ret,
                     is_plain_pub(&e.vis_marker),
                     path,
+                    v.name.span(),
                 );
                 path.pop();
             }
@@ -86,7 +170,8 @@ pub(crate) fn recurse_through_definition(
         }
         Declaration::Union(u) => {
             strike_through_attributes(&mut u.attributes, &mut strike_attrs, ret);
-            path.push(u.name.to_string());
+            path.enable_by_attr(&mut u.attributes);
+            path.push(&u.name.to_string());
             named_struct_fields(&mut u.fields, &strike_attrs, ret, false, path);
             path.pop();
             if make_pub {
@@ -95,8 +180,9 @@ pub(crate) fn recurse_through_definition(
         }
         Declaration::TyDefinition(t) => {
             strike_through_attributes(&mut t.attributes, &mut strike_attrs, ret);
+            path.enable_by_attr(&mut t.attributes);
             let ttok = mem::take(&mut t.initializer_ty.tokens);
-            path.push(t.name.to_string());
+            path.push(&t.name.to_string());
             recurse_through_type_list(
                 &type_tree(&ttok, ret),
                 &strike_attrs,
@@ -209,12 +295,15 @@ fn recurse_through_struct_fields(
     strike_attrs: &[Attribute],
     ret: &mut TokenStream,
     in_pub_enum: bool,
-    path: &mut Vec<String>,
+    path: &mut FieldPath,
+    span: Span,
 ) {
     match fields {
         StructFields::Unit => (),
         StructFields::Named(n) => named_struct_fields(n, strike_attrs, ret, in_pub_enum, path),
-        StructFields::Tuple(t) => tuple_struct_fields(t, strike_attrs, ret, in_pub_enum, path),
+        StructFields::Tuple(t) => {
+            tuple_struct_fields(t, strike_attrs, ret, in_pub_enum, path, span)
+        }
     }
 }
 
@@ -223,18 +312,20 @@ fn named_struct_fields(
     strike_attrs: &[Attribute],
     ret: &mut TokenStream,
     in_pub_enum: bool,
-    path: &mut Vec<String>,
+    path: &mut FieldPath,
 ) {
     for (field, _) in &mut n.fields.iter_mut() {
+        // clone path here to start at the same level for each field
+        // this is necessary because the path is modified/cleared in the recursion
+        let mut path = path.clone();
         let field_name = field.name.to_string();
         let field_name = match field_name.starts_with("r#") {
             true => &field_name[2..],
             false => &field_name,
         };
-        let name_hint = path.join("_") + "_" + field_name;
-        let name_hint = Ident::new(&name_hint.to_pascal_case(), field.name.span());
         let ttok = mem::take(&mut field.ty.tokens);
-        path.push(field_name.to_string());
+        path.push(field_name);
+        let name_hint = path.get_name_hint(None, field.name.span());
         recurse_through_type_list(
             &type_tree(&ttok, ret),
             strike_attrs,
@@ -242,7 +333,7 @@ fn named_struct_fields(
             &Some(name_hint),
             is_plain_pub(&field.vis_marker) || in_pub_enum,
             &mut field.ty.tokens,
-            path,
+            &mut path,
         );
         path.pop();
     }
@@ -253,9 +344,13 @@ fn tuple_struct_fields(
     strike_attrs: &[Attribute],
     ret: &mut TokenStream,
     in_pub_enum: bool,
-    path: &mut Vec<String>,
+    path: &mut FieldPath,
+    span: Span,
 ) {
     for (num, (field, _)) in &mut t.fields.iter_mut().enumerate() {
+        // clone path here to start at the same level for each field
+        // this is necessary because the path is modified/cleared in the recursion
+        let mut path = path.clone();
         let ttok = mem::take(&mut field.ty.tokens);
         let ttok = type_tree(&ttok, ret);
 
@@ -282,10 +377,7 @@ fn tuple_struct_fields(
                 None => ttok,
             },
         };
-
-        path.push(num.to_string());
-        let name_hint = path.join("_");
-        let name_hint = Ident::new(&name_hint.to_pascal_case(), Span::call_site());
+        let name_hint = path.get_name_hint(Some(num), span);
         recurse_through_type_list(
             &ttok,
             strike_attrs,
@@ -293,9 +385,8 @@ fn tuple_struct_fields(
             &Some(name_hint),
             is_plain_pub(&field.vis_marker) || in_pub_enum,
             &mut field.ty.tokens,
-            path,
+            &mut path,
         );
-        path.pop();
     }
 }
 
@@ -348,7 +439,7 @@ fn recurse_through_type_list(
     name_hint: &Option<Ident>,
     pub_hint: bool,
     type_ret: &mut Vec<TokenTree>,
-    path: &mut Vec<String>,
+    path: &mut FieldPath,
 ) {
     let mut tok = tok;
     loop {
@@ -381,7 +472,7 @@ fn recurse_through_type(
     name_hint: &Option<Ident>,
     pub_hint: bool,
     type_ret: &mut Vec<TokenTree>,
-    path: &mut Vec<String>,
+    path: &mut FieldPath,
 ) {
     if let Some(c) = tok.windows(3).find_map(|t| {
         get_tt_punct(&t[0], ':')
@@ -418,6 +509,7 @@ fn recurse_through_type(
                 strike_attrs.to_vec(),
                 pub_hint,
                 ret,
+                path,
             )
         } else {
             let name = match name_hint {
@@ -435,7 +527,7 @@ fn recurse_through_type(
             let head = decl.into_iter().collect::<TokenStream>();
             let newthing = quote! {#head #name #tail};
             let generics =
-                recurse_through_definition(newthing, strike_attrs.to_vec(), pub_hint, ret);
+                recurse_through_definition(newthing, strike_attrs.to_vec(), pub_hint, ret, path);
 
             type_ret.push(name);
             generics
