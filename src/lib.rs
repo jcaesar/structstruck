@@ -199,12 +199,31 @@
 //! println!("{:#?}", Parent { ..todo!("value skipped for brevity") });
 //! ```
 //!
+//! #### Full path as struct name
+//! If you want to use the full path to a field as the name of the stuct add `#[structstruck::names_from_path]` to the struct.
+//! This is useful to prevent collisions when using the same field name multiple times or a type with the same name as a field exists.
+//! ```no_run
+//! structstruck::strike! {
+//!     #[structstruck::names_from_path]
+//!     struct Outer {
+//!         inner: struct { value: usize }
+//!     }
+//! }
+//! ```
+//! This will generate the following declarations:
+//! ```no_run
+//! struct OuterInner {
+//!   value: usize
+//! }
+//! struct Outer {
+//!    inner: OuterInner,
+//! }
+//! ```
+//!
 //! ### Missing features, limitations
 //!  * You can't exclude subtrees from `#[strikethrough[…]]`.
 //!  * Generic parameter constraints need to be repeated for each struct.
 //!  * Usage error handling is minimal, e.g.:
-//!  * No protection against using the name of a field twice as the name of a struct,  
-//!    e.g. with `foo: Result<struct {…}, struct {…}>,`
 //!  * All substructs will be linearized directly next to the parent struct - without any namespacing or modules.  
 //!    Would be interesting to support `foo: struct foo::Foo {…}` or some automatic version of that.
 //!  * rustfmt really doesn't play along.
