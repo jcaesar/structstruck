@@ -3,12 +3,6 @@
 version = 3
 
 [[package]]
-name = "heck"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
-
-[[package]]
 name = "prettyplease"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -40,7 +34,6 @@ dependencies = [
 name = "structstruck"
 version = "0.4.1"
 dependencies = [
- "heck",
  "prettyplease",
  "proc-macro2",
  "quote",

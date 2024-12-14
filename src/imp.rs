@@ -1,4 +1,3 @@
-use heck::ToPascalCase;
 use proc_macro2::Delimiter;
 use proc_macro2::Group;
 use proc_macro2::Ident;
