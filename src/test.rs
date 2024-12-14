@@ -1,4 +1,4 @@
-use crate::imp::{recurse_through_definition, type_tree, FieldPath, TypeTree};
+use crate::imp::{recurse_through_definition, type_tree, TypeTree};
 use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 use quote::quote;
 
@@ -14,7 +14,7 @@ fn pretty(plan: proc_macro2::TokenStream) -> String {
 
 fn check(nested: proc_macro2::TokenStream, planexpected: proc_macro2::TokenStream) {
     let mut plan = proc_macro2::TokenStream::new();
-    recurse_through_definition(nested, vec![], false, &mut plan, &mut FieldPath::default());
+    recurse_through_definition(nested, vec![], false, &mut plan, false);
     // No Eq implementations. :/
     let plan = pretty(plan);
     let planexpected = pretty(planexpected);
@@ -264,7 +264,7 @@ fn raw_identifier_panic_bug() {
         vec![],
         false,
         &mut proc_macro2::TokenStream::new(),
-        &mut FieldPath::default(),
+        false,
     );
 }
 
@@ -431,7 +431,7 @@ fn inner_comment_as_in_doc() {
         }
     };
     let mut rout = Default::default();
-    recurse_through_definition(out, vec![], false, &mut rout, &mut FieldPath::default());
+    recurse_through_definition(out, vec![], false, &mut rout, false);
     check(from, rout);
 }
 
@@ -442,7 +442,7 @@ fn strikethrough_weird() {
         struct struct { }
     };
     let mut rout = Default::default();
-    recurse_through_definition(out, vec![], false, &mut rout, &mut FieldPath::default());
+    recurse_through_definition(out, vec![], false, &mut rout, false);
     assert!(rout
         .into_iter()
         .any(|t| matches!(t, TokenTree::Ident(kw) if kw == "compile_error")));
@@ -509,7 +509,7 @@ fn missing_comma_issue4() {
         }
     };
     let mut to = TokenStream::new();
-    recurse_through_definition(from, vec![], false, &mut to, &mut FieldPath::default());
+    recurse_through_definition(from, vec![], false, &mut to, false);
     assert!(to.clone().into_iter().any(|tok| match tok {
         TokenTree::Ident(id) => id == "compile_error",
         _ => false,
@@ -547,7 +547,7 @@ fn issue4_variant() {
         }
     };
     let mut to = TokenStream::new();
-    recurse_through_definition(from, vec![], false, &mut to, &mut FieldPath::default());
+    recurse_through_definition(from, vec![], false, &mut to, false);
     assert!(to.clone().into_iter().any(|tok| match tok {
         TokenTree::Ident(id) => id == "compile_error",
         _ => false,
@@ -644,9 +644,7 @@ fn two_tuple_values() {
     check(from, out);
 }
 
-//////////////////////////////////////////////////
-// some of the  tests again but with path names //
-//////////////////////////////////////////////////
+/* repeating some of the tests above, but with path names */
 
 #[test]
 fn path_in_generics() {
@@ -931,9 +929,7 @@ fn nested() {
     };
     check(from, out);
 }
-/////////////////////////////////
-// Test added for path feature //
-/////////////////////////////////
+/* end repeated tests for path names */
 
 #[test]
 fn path_deep_nesting() {
