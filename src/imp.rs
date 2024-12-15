@@ -45,16 +45,7 @@ pub(crate) struct FieldPath<'a> {
 impl<'a> FieldPath<'a> {
     fn from(parent_name: &'a str, mut enabled: bool, attributes: &mut Vec<Attribute>) -> Self {
         attributes.retain(|attr| {
-            use TokenTree::{Ident, Punct};
-            let enable = matches!(
-                &attr.path[..],
-                [Ident(crat), Punct(c1), Punct(c2), Ident(attr)]
-                if crat == "structstruck"
-                && c1.as_char() == ':'
-                && c1.spacing() == Spacing::Joint
-                && c2.as_char() == ':'
-                && attr == "names_from_path"
-            );
+            let enable = check_crate_attr(attr, "names_from_path");
             enabled |= enable;
             !enable
         });
@@ -102,6 +93,19 @@ impl<'a> FieldPath<'a> {
             ..*self
         }
     }
+}
+
+fn check_crate_attr(attr: &Attribute, attr_name: &str) -> bool {
+    use TokenTree::{Ident, Punct};
+    matches!(
+        &attr.path[..],
+        [Ident(crat), Punct(c1), Punct(c2), Ident(attr)]
+        if crat == env!("CARGO_CRATE_NAME")
+        && c1.as_char() == ':'
+        && c1.spacing() == Spacing::Joint
+        && c2.as_char() == ':'
+        && attr == attr_name
+    )
 }
 
 /// capitalizes the first letter of each word and the one after an underscore
@@ -404,14 +408,20 @@ fn strike_through_attributes(
     ret: &mut TokenStream,
 ) {
     dec_attrs.retain(|attr| {
-        if matches!(&attr.path[..], [TokenTree::Ident(kw)] if kw == "strikethrough") {
+        let each = check_crate_attr(attr, "each");
+        let strikethrough =
+            matches!(&attr.path[..], [TokenTree::Ident(kw)] if kw == "strikethrough");
+        if strikethrough {
+            report_strikethrough_deprecated(ret, attr.path[0].span());
+        }
+        if strikethrough || each {
             match &attr.value {
                 AttributeValue::Group(brackets, value) => {
                     strike_attrs.push(Attribute {
                         tk_bang: attr.tk_bang.clone(),
                         tk_hash: attr.tk_hash.clone(),
                         tk_brackets: brackets.clone(),
-                        // Hack a bit: Put all the tokens into the path.
+                        // Hack a bit: Put all the tokens into the path, none in the value.
                         path: value.to_vec(),
                         value: AttributeValue::Empty,
                     });
@@ -420,7 +430,7 @@ fn strike_through_attributes(
                     report_error(
                         stream_span(attr.get_value_tokens().iter()),
                         ret,
-                        "#[strikethrough …]: … must be a [group]",
+                        "#[structstruck::each …]: … must be a [group]",
                     );
                 }
             };
@@ -431,6 +441,22 @@ fn strike_through_attributes(
     });
 
     dec_attrs.splice(0..0, strike_attrs.iter().cloned());
+}
+
+fn report_strikethrough_deprecated(ret: &mut TokenStream, span: Span) {
+    // stolen from proc-macro-warning, which depends on syn
+    let q = quote_spanned!(span =>
+        #[allow(dead_code)]
+        #[allow(non_camel_case_types)]
+        #[allow(non_snake_case)]
+        fn strikethrough_used() {
+            #[deprecated(note = "The strikethrough attribute is depcrecated. Use structstruck::each instead.")]
+            #[allow(non_upper_case_globals)]
+            const _w: () = ();
+            let _ = _w;
+        }
+    );
+    q.to_tokens(ret);
 }
 
 fn get_tt_punct<'t>(t: &'t TypeTree<'t>, c: char) -> Option<&'t Punct> {

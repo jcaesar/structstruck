@@ -29,8 +29,8 @@ fn check(nested: proc_macro2::TokenStream, planexpected: proc_macro2::TokenStrea
 #[test]
 fn strikethrough_derive() {
     let from = quote! {
-        #[strikethrough[striked_attr]]
-        #[strikethrough[derive(Debug, Default, PartialEq)]]
+        #[structstruck::each[striked_attr]]
+        #[structstruck::each[derive(Debug, Default, PartialEq)]]
         #[gubbel]
         struct Parent {
             a: #[gobbel] struct {
@@ -438,7 +438,7 @@ fn inner_comment_as_in_doc() {
 #[test]
 fn strikethrough_weird() {
     let out = quote! {
-        #[strikethrough = foo]
+        #[structstruck::each = foo]
         struct struct { }
     };
     let mut rout = Default::default();
@@ -1009,4 +1009,17 @@ fn path_break_middle() {
         }
     };
     check(from, out);
+}
+
+#[test]
+fn strikethrough_deprecated() {
+    let out = quote! {
+        #[strikethrough[past]]
+        struct struct { }
+    };
+    let mut rout = Default::default();
+    recurse_through_definition(out, vec![], false, &mut rout, false);
+    let out = dbg!(rout.to_string());
+    assert!(out.contains("deprecated"));
+    assert!(out.contains("structstruck::each"));
 }

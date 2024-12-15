@@ -175,13 +175,13 @@
 //! }
 //! ```
 //!
-//! To quickly apply attributes to all declarations, attributes can be wrapped in the `#[strikethrough[…]]`
+//! To quickly apply attributes to all declarations, attributes can be wrapped in the `#[structstruck::each[…]]`
 //! pseudoattribute.
 //! ```no_run
 //! structstruck::strike! {
 //!     // It's strikethrough[…], not strikethrough(…)
 //!     // This appears to confuse even the rustdoc syntax highlighter
-//!     #[strikethrough[derive(Debug)]]
+//!     #[structstruck::each[derive(Debug)]]
 //!     struct Parent {
 //!         a: Option<struct {
 //!             c: u32,
@@ -221,7 +221,7 @@
 //! ```
 //!
 //! ### Missing features, limitations
-//!  * You can't exclude subtrees from `#[strikethrough[…]]`.
+//!  * You can't exclude subtrees from `#[structstruck::each[…]]`.
 //!  * Generic parameter constraints need to be repeated for each struct.
 //!  * Usage error handling is minimal, e.g.:
 //!  * All substructs will be linearized directly next to the parent struct - without any namespacing or modules.  
