@@ -199,12 +199,12 @@
 //! println!("{:#?}", Parent { ..todo!("value skipped for brevity") });
 //! ```
 //!
-//! #### Full path as struct name
-//! If you want to use the full path to a field as the name of the stuct add `#[structstruck::names_from_path]` to the struct.
-//! This is useful to prevent collisions when using the same field name multiple times or a type with the same name as a field exists.
+//! #### Avoiding name collisions
+//! If you want include the parent struct name (or parent enum name and variant name)
+//! in the name of the child struct, add `#[structstruck::long_names]` to the struct.
 //! ```no_run
 //! structstruck::strike! {
-//!     #[structstruck::names_from_path]
+//!     #[structstruck::long_names]
 //!     struct Outer {
 //!         inner: struct { value: usize }
 //!     }
@@ -219,6 +219,20 @@
 //!    inner: OuterInner,
 //! }
 //! ```
+//! This can be combined with `structstruck::each` to use the full path of all ancestor struct names.
+//! ```no_run
+//! structstruck::strike! {
+//!     #[structstruck::each[structstruck::long_names]]
+//!     struct A {
+//!         b: struct {
+//!             c: struct { }
+//!         }
+//!     }
+//! }
+//! ```
+//! will generate three structs, named `A`, `AB`, and `ABC`.
+//!
+//! This is useful to prevent collisions when using the same field name multiple times or a type with the same name as a field exists.
 //!
 //! ### Missing features, limitations
 //!  * You can't exclude subtrees from `#[structstruck::each[…]]`.
@@ -242,6 +256,6 @@ mod test;
 pub fn strike(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut ret = Default::default();
     let item = imp::flatten_empty_groups(item.into());
-    imp::recurse_through_definition(item, vec![], false, &mut ret, false);
+    imp::recurse_through_definition(item, vec![], false, &mut ret);
     ret.into()
 }

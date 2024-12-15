@@ -14,7 +14,7 @@ fn pretty(plan: proc_macro2::TokenStream) -> String {
 
 fn check(nested: proc_macro2::TokenStream, planexpected: proc_macro2::TokenStream) {
     let mut plan = proc_macro2::TokenStream::new();
-    recurse_through_definition(nested, vec![], false, &mut plan, false);
+    recurse_through_definition(nested, vec![], false, &mut plan);
     // No Eq implementations. :/
     let plan = pretty(plan);
     let planexpected = pretty(planexpected);
@@ -259,13 +259,7 @@ fn raw_identifier_panic_bug() {
             r#type: () // This was actually enough for a segfault
         };
     };
-    recurse_through_definition(
-        plain,
-        vec![],
-        false,
-        &mut proc_macro2::TokenStream::new(),
-        false,
-    );
+    recurse_through_definition(plain, vec![], false, &mut proc_macro2::TokenStream::new());
 }
 
 #[test]
@@ -431,7 +425,7 @@ fn inner_comment_as_in_doc() {
         }
     };
     let mut rout = Default::default();
-    recurse_through_definition(out, vec![], false, &mut rout, false);
+    recurse_through_definition(out, vec![], false, &mut rout);
     check(from, rout);
 }
 
@@ -442,7 +436,7 @@ fn strikethrough_weird() {
         struct struct { }
     };
     let mut rout = Default::default();
-    recurse_through_definition(out, vec![], false, &mut rout, false);
+    recurse_through_definition(out, vec![], false, &mut rout);
     assert!(rout
         .into_iter()
         .any(|t| matches!(t, TokenTree::Ident(kw) if kw == "compile_error")));
@@ -509,7 +503,7 @@ fn missing_comma_issue4() {
         }
     };
     let mut to = TokenStream::new();
-    recurse_through_definition(from, vec![], false, &mut to, false);
+    recurse_through_definition(from, vec![], false, &mut to);
     assert!(to.clone().into_iter().any(|tok| match tok {
         TokenTree::Ident(id) => id == "compile_error",
         _ => false,
@@ -547,7 +541,7 @@ fn issue4_variant() {
         }
     };
     let mut to = TokenStream::new();
-    recurse_through_definition(from, vec![], false, &mut to, false);
+    recurse_through_definition(from, vec![], false, &mut to);
     assert!(to.clone().into_iter().any(|tok| match tok {
         TokenTree::Ident(id) => id == "compile_error",
         _ => false,
@@ -649,7 +643,7 @@ fn two_tuple_values() {
 #[test]
 fn path_in_generics() {
     let from = quote! {
-        #[structstruck::names_from_path]
+        #[structstruck::each[structstruck::long_names]]
         struct Parent {
             a: Option<struct {
                 c: u32,
@@ -684,7 +678,7 @@ fn path_in_generics() {
 #[test]
 fn path_enum_named() {
     let from = quote! {
-        #[structstruck::names_from_path]
+        #[structstruck::each[structstruck::long_names]]
         enum Parent {
             A {
                 a: enum { Foo { b: i8 } },
@@ -708,7 +702,7 @@ fn path_enum_named() {
 #[test]
 fn path_tupledec() {
     let from = quote! {
-        #[structstruck::names_from_path]
+        #[structstruck::each[structstruck::long_names]]
         struct Parent {
             a: struct (i16),
             b: struct (struct Bar { bar: i64 }),
@@ -729,7 +723,7 @@ fn path_tupledec() {
 #[test]
 fn path_raw_identifier_as_name() {
     let from = quote! {
-        #[structstruck::names_from_path]
+        #[structstruck::each[structstruck::long_names]]
         struct A { r#type: struct ()  };
     };
     let out = quote! {
@@ -742,7 +736,7 @@ fn path_raw_identifier_as_name() {
 #[test]
 fn path_generics_on_def() {
     let from = quote! {
-        #[structstruck::names_from_path]
+        #[structstruck::each[structstruck::long_names]]
         struct Outer {
             unnamed: struct<T>{t: T},
             whatev: struct Named<T>{t: T},
@@ -759,7 +753,7 @@ fn path_generics_on_def() {
 #[test]
 fn path_pub_enum() {
     let from = quote! {
-        #[structstruck::names_from_path]
+        #[structstruck::each[structstruck::long_names]]
         enum Opts {
             Login(pub struct {
                 hs: Url,
@@ -789,7 +783,7 @@ fn path_pub_enum() {
 #[test]
 fn path_issue_2() {
     let from = quote! {
-        #[structstruck::names_from_path]
+        #[structstruck::each[structstruck::long_names]]
         enum Expr<'src> {
             Binary(struct<'src> {
                  left: Box<Expr<'src>>,
@@ -813,7 +807,7 @@ fn path_issue_2() {
 #[test]
 fn path_issue5_unions() {
     let from = quote! {
-        #[structstruck::names_from_path]
+        #[structstruck::each[structstruck::long_names]]
         struct x_thing {
             a: union {
                 value: u32,
@@ -845,7 +839,7 @@ fn path_issue5_unions() {
 #[test]
 fn path_typedef() {
     let from = quote! {
-        #[structstruck::names_from_path]
+        #[structstruck::each[structstruck::long_names]]
         struct Thing {
             foo: type = u32,
         }
@@ -862,7 +856,7 @@ fn path_typedef() {
 #[test]
 fn path_issue6_path() {
     let from = quote! {
-        #[structstruck::names_from_path]
+        #[structstruck::each[structstruck::long_names]]
         struct ItemDefine {
             semantic_token: keywords::semantic,
             ident: Ident,
@@ -889,7 +883,7 @@ fn path_issue6_path() {
 #[test]
 fn path_two_tuple_values() {
     let from = quote! {
-        #[structstruck::names_from_path]
+        #[structstruck::each[structstruck::long_names]]
         struct Outer{
             inner: struct{
                 value: struct{
@@ -915,7 +909,7 @@ fn path_two_tuple_values() {
 #[test]
 fn nested() {
     let from = quote! {
-        #[structstruck::names_from_path]
+        #[structstruck::each[structstruck::long_names]]
         enum Parent {
             Tuple(struct{b: u8}, struct{c: u8})
         }
@@ -934,7 +928,7 @@ fn nested() {
 #[test]
 fn path_deep_nesting() {
     let from = quote! {
-        #[structstruck::names_from_path]
+        #[structstruck::each[structstruck::long_names]]
         struct A{
             b: struct{
                 c: struct {
@@ -962,7 +956,7 @@ fn path_not_on_outermost() {
     let from = quote! {
         struct A {
             b: struct {
-                #![structstruck::names_from_path]
+                #![structstruck::each[structstruck::long_names]]
                 c: struct {
                     d:()
                 }
@@ -984,9 +978,35 @@ fn path_not_on_outermost() {
 }
 
 #[test]
+fn not_path() {
+    let from = quote! {
+        #[structstruck::long_names]
+        struct A {
+            b: struct {
+                c: struct {
+                    d: ()
+                }
+            }
+        }
+    };
+    let out = quote! {
+        struct C {
+            d: ()
+        }
+        struct AB {
+            c: C
+        }
+        struct A {
+            b: AB
+        }
+    };
+    check(from, out);
+}
+
+#[test]
 fn path_break_middle() {
     let from = quote! {
-        #[structstruck::names_from_path]
+        #[structstruck::each[structstruck::long_names]]
         struct A {
             b: struct {
                 c: struct X {
@@ -1018,7 +1038,7 @@ fn strikethrough_deprecated() {
         struct struct { }
     };
     let mut rout = Default::default();
-    recurse_through_definition(out, vec![], false, &mut rout, false);
+    recurse_through_definition(out, vec![], false, &mut rout);
     let out = dbg!(rout.to_string());
     assert!(out.contains("deprecated"));
     assert!(out.contains("structstruck::each"));
