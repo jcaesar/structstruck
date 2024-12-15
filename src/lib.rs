@@ -179,7 +179,7 @@
 //! pseudoattribute.
 //! ```no_run
 //! structstruck::strike! {
-//!     // It's strikethrough[…], not strikethrough(…)
+//!     // It's structstruck::each[…], not structstruck::each(…)
 //!     // This appears to confuse even the rustdoc syntax highlighter
 //!     #[structstruck::each[derive(Debug)]]
 //!     struct Parent {
