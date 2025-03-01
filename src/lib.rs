@@ -199,6 +199,27 @@
 //! println!("{:#?}", Parent { ..todo!("value skipped for brevity") });
 //! ```
 //!
+//! The behavior of `each` can be influenced in two ways:
+//!  * `structstruck::exclude_each` will ignore any attributes in `each`.
+//!    The order of attributes does not influence `exclude_each`.
+//!  * `structstruck::clear_each` will reset the set of attributes.
+//!    The order of atttributes matters.
+//!    After using `clear_each`, new attributes can be added.
+//!
+//! For example:
+//! ```no_run
+//! structstruck::strike! {
+//!     #[structstruck::skip_each]
+//!     #[structstruck::each[Attr1]]
+//!     #[structstruck::clear_each]
+//!     #[structstruck::each[Attr2]]
+//!     struct A {
+//!         b: struct {}
+//!     }
+//! }
+//! ```
+//! will place no attributes on `A` and only `Attr2` on `B`.
+//!
 //! #### Avoiding name collisions
 //! If you want include the parent struct name (or parent enum name and variant name)
 //! in the name of the child struct, add `#[structstruck::long_names]` to the struct.
@@ -235,7 +256,6 @@
 //! This is useful to prevent collisions when using the same field name multiple times or a type with the same name as a field exists.
 //!
 //! ### Missing features, limitations
-//!  * You can't exclude subtrees from `#[structstruck::each[…]]`.
 //!  * Generic parameter constraints need to be repeated for each struct.
 //!  * Usage error handling is minimal, e.g.:
 //!  * All substructs will be linearized directly next to the parent struct - without any namespacing or modules.  
