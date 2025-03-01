@@ -1,4 +1,3 @@
-use heck::ToPascalCase;
 use proc_macro2::Delimiter;
 use proc_macro2::Group;
 use proc_macro2::Ident;
@@ -36,6 +35,99 @@ fn stream_span(input: impl Iterator<Item = impl Deref<Target = TokenTree>>) -> O
     ret
 }
 
+#[derive(Default, Clone, Copy)]
+pub(crate) struct NameHints<'a> {
+    long: bool,
+    parent_name: &'a str,
+    variant_name: Option<&'a str>,
+    field_name: Option<&'a str>,
+}
+impl<'a> NameHints<'a> {
+    fn from(parent_name: &'a str, attributes: &mut Vec<Attribute>) -> Self {
+        let mut long = false;
+        attributes.retain(|attr| {
+            let enable_long = check_crate_attr(attr, "long_names");
+            long |= enable_long;
+            !enable_long
+        });
+        NameHints {
+            long,
+            parent_name,
+            variant_name: None,
+            field_name: None,
+        }
+    }
+
+    fn get_name_hint(&self, num: Option<usize>, span: Span) -> Ident {
+        let num = num.filter(|&n| n > 0).map(|n| n.to_string());
+        let names = match self.long {
+            true => &[
+                Some(self.parent_name),
+                self.variant_name,
+                self.field_name,
+                num.as_deref(),
+            ][..],
+            false => &[
+                self.field_name
+                    .or(self.variant_name)
+                    .or(Some(self.parent_name)),
+                num.as_deref(),
+            ][..],
+        };
+        let name = names
+            .into_iter()
+            .map(|x| x.map(pascal_case).unwrap_or(String::new()))
+            .fold(String::new(), |s, p| s + &p);
+        Ident::new(&name, span)
+    }
+
+    fn with_field_name(&self, field_name: &'a str) -> Self {
+        Self {
+            field_name: Some(field_name),
+            ..*self
+        }
+    }
+
+    fn with_variant_name(&self, variant_name: &'a str) -> Self {
+        Self {
+            variant_name: Some(variant_name),
+            ..*self
+        }
+    }
+}
+
+fn check_crate_attr(attr: &Attribute, attr_name: &str) -> bool {
+    use TokenTree::{Ident, Punct};
+    matches!(
+        &attr.path[..],
+        [Ident(crat), Punct(c1), Punct(c2), Ident(attr)]
+        if crat == env!("CARGO_CRATE_NAME")
+        && c1.as_char() == ':'
+        && c1.spacing() == Spacing::Joint
+        && c2.as_char() == ':'
+        && attr == attr_name
+    )
+}
+
+/// capitalizes the first letter of each word and the one after an underscore
+/// e.g. `foo_bar` -> `FooBar`
+/// this also keeps consecutive uppercase letters
+fn pascal_case(s: &str) -> String {
+    let mut ret = String::new();
+    let mut uppercase_next = true;
+    for c in s.chars() {
+        if c == '_' {
+            uppercase_next = true;
+        } else if uppercase_next {
+            ret.push(c.to_ascii_uppercase());
+            uppercase_next = false;
+        } else {
+            ret.push(c);
+        }
+    }
+    ret
+}
+
 pub(crate) fn recurse_through_definition(
     input: TokenStream,
     mut strike_attrs: Vec<Attribute>,
@@ -57,20 +149,34 @@ pub(crate) fn recurse_through_definition(
     match &mut parsed {
         Declaration::Struct(s) => {
             strike_through_attributes(&mut s.attributes, &mut strike_attrs, ret);
-            recurse_through_struct_fields(&mut s.fields, &strike_attrs, ret, &None, false);
+            let name = s.name.to_string();
+            let path = &NameHints::from(&name, &mut s.attributes);
+            recurse_through_struct_fields(
+                &mut s.fields,
+                &strike_attrs,
+                ret,
+                false,
+                path,
+                s.name.span(),
+            );
             if make_pub {
                 s.vis_marker.get_or_insert_with(make_pub_marker);
             }
         }
         Declaration::Enum(e) => {
             strike_through_attributes(&mut e.attributes, &mut strike_attrs, ret);
+            let name = e.name.to_string();
+            let path = &NameHints::from(&name, &mut e.attributes);
             for (v, _) in &mut e.variants.iter_mut() {
+                let name = v.name.to_string();
+                let path = &path.with_variant_name(&name);
                 recurse_through_struct_fields(
                     &mut v.contents,
                     &strike_attrs,
                     ret,
-                    &Some(v.name.clone()),
                     is_plain_pub(&e.vis_marker),
+                    path,
+                    v.name.span(),
                 );
             }
             if make_pub {
@@ -79,13 +185,17 @@ pub(crate) fn recurse_through_definition(
         }
         Declaration::Union(u) => {
             strike_through_attributes(&mut u.attributes, &mut strike_attrs, ret);
-            named_struct_fields(&mut u.fields, &strike_attrs, ret, false);
+            let name = u.name.to_string();
+            let path = &NameHints::from(&name, &mut u.attributes);
+            named_struct_fields(&mut u.fields, &strike_attrs, ret, false, path);
             if make_pub {
                 u.vis_marker.get_or_insert_with(make_pub_marker);
             }
         }
         Declaration::TyDefinition(t) => {
             strike_through_attributes(&mut t.attributes, &mut strike_attrs, ret);
+            let name = t.name.to_string();
+            let path = &NameHints::from(&name, &mut t.attributes);
             let ttok = mem::take(&mut t.initializer_ty.tokens);
             recurse_through_type_list(
                 &type_tree(&ttok, ret),
@@ -94,6 +204,7 @@ pub(crate) fn recurse_through_definition(
                 &None,
                 false,
                 &mut t.initializer_ty.tokens,
+                path,
             );
             if make_pub {
                 t.vis_marker.get_or_insert_with(make_pub_marker);
@@ -196,13 +307,16 @@ fn recurse_through_struct_fields(
     fields: &mut venial::StructFields,
     strike_attrs: &[Attribute],
     ret: &mut TokenStream,
-    name_hint: &Option<Ident>,
     in_pub_enum: bool,
+    path: &NameHints,
+    span: Span,
 ) {
     match fields {
         StructFields::Unit => (),
-        StructFields::Named(n) => named_struct_fields(n, strike_attrs, ret, in_pub_enum),
-        StructFields::Tuple(t) => tuple_struct_fields(t, strike_attrs, ret, name_hint, in_pub_enum),
+        StructFields::Named(n) => named_struct_fields(n, strike_attrs, ret, in_pub_enum, path),
+        StructFields::Tuple(t) => {
+            tuple_struct_fields(t, strike_attrs, ret, in_pub_enum, path, span)
+        }
     }
 }
 
@@ -211,15 +325,20 @@ fn named_struct_fields(
     strike_attrs: &[Attribute],
     ret: &mut TokenStream,
     in_pub_enum: bool,
+    path: &NameHints,
 ) {
     for (field, _) in &mut n.fields.iter_mut() {
-        let name_hint = field.name.to_string();
-        let name_hint = match name_hint.starts_with("r#") {
-            true => &name_hint[2..],
-            false => &name_hint,
+        // clone path here to start at the same level for each field
+        // this is necessary because the path is modified/cleared in the recursion
+        let path = path.clone();
+        let field_name = field.name.to_string();
+        let field_name = match field_name.starts_with("r#") {
+            true => &field_name[2..],
+            false => &field_name,
         };
-        let name_hint = Ident::new(&name_hint.to_pascal_case(), field.name.span());
         let ttok = mem::take(&mut field.ty.tokens);
+        let path = path.with_field_name(field_name);
+        let name_hint = path.get_name_hint(None, field.name.span());
         recurse_through_type_list(
             &type_tree(&ttok, ret),
             strike_attrs,
@@ -227,6 +346,7 @@ fn named_struct_fields(
             &Some(name_hint),
             is_plain_pub(&field.vis_marker) || in_pub_enum,
             &mut field.ty.tokens,
+            &path,
         );
     }
 }
@@ -235,10 +355,14 @@ fn tuple_struct_fields(
     t: &mut venial::TupleStructFields,
     strike_attrs: &[Attribute],
     ret: &mut TokenStream,
-    name_hint: &Option<Ident>,
     in_pub_enum: bool,
+    path: &NameHints,
+    span: Span,
 ) {
-    for (field, _) in &mut t.fields.iter_mut() {
+    for (num, (field, _)) in &mut t.fields.iter_mut().enumerate() {
+        // clone path here to start at the same level for each field
+        // this is necessary because the path is modified/cleared in the recursion
+        let mut path = path.clone();
         let ttok = mem::take(&mut field.ty.tokens);
         let ttok = type_tree(&ttok, ret);
 
@@ -265,14 +389,15 @@ fn tuple_struct_fields(
                 None => ttok,
             },
         };
-
+        let name_hint = path.get_name_hint(Some(num), span);
         recurse_through_type_list(
             &ttok,
             strike_attrs,
             ret,
-            name_hint,
+            &Some(name_hint),
             is_plain_pub(&field.vis_marker) || in_pub_enum,
             &mut field.ty.tokens,
+            &mut path,
         );
     }
 }
@@ -282,31 +407,45 @@ fn strike_through_attributes(
     strike_attrs: &mut Vec<Attribute>,
     ret: &mut TokenStream,
 ) {
-    let mut nostrike = false;
+    let mut skip_each = false;
 
     dec_attrs.retain(|attr| {
-        if matches!(&attr.path[..], [TokenTree::Ident(kw)] if kw == "nostrike") {
-            match &attr.value {
-                AttributeValue::Empty => {
-                    nostrike = true;
-                },
-                _ => {
-                    report_error(
-                        stream_span(attr.get_value_tokens().iter()),
-                        ret,
-                        "#[nostrike] does not take parameters",
-                    );
-                }
+        let mut check_noattr = |name: &str| match &attr.value {
+            AttributeValue::Empty => {}
+            _ => {
+                report_error(
+                    stream_span(attr.get_value_tokens().iter()),
+                    ret,
+                    &format!("#[{}] does not take parameters", name),
+                );
             }
-            false
-        } else if matches!(&attr.path[..], [TokenTree::Ident(kw)] if kw == "strikethrough") {
+        };
+
+        if check_crate_attr(attr, "skip_each") {
+            check_noattr("skip_each");
+            skip_each |= true;
+            return false;
+        }
+        if check_crate_attr(attr, "clear_each") {
+            check_noattr("clear_each");
+            strike_attrs.clear();
+            return false;
+        }
+
+        let each = check_crate_attr(attr, "each");
+        let strikethrough =
+            matches!(&attr.path[..], [TokenTree::Ident(kw)] if kw == "strikethrough");
+        if strikethrough {
+            report_strikethrough_deprecated(ret, attr.path[0].span());
+        }
+        if strikethrough || each {
             match &attr.value {
                 AttributeValue::Group(brackets, value) => {
                     strike_attrs.push(Attribute {
                         tk_bang: attr.tk_bang.clone(),
                         tk_hash: attr.tk_hash.clone(),
                         tk_brackets: brackets.clone(),
-                        // Hack a bit: Put all the tokens into the path.
+                        // Hack a bit: Put all the tokens into the path, none in the value.
                         path: value.to_vec(),
                         value: AttributeValue::Empty,
                     });
@@ -315,19 +454,34 @@ fn strike_through_attributes(
                     report_error(
                         stream_span(attr.get_value_tokens().iter()),
                         ret,
-                        "#[strikethrough …]: … must be a [group]",
+                        "#[structstruck::each …]: … must be a [group]",
                     );
                 }
             };
-            false
-        } else {
-            true
+            return false;
         }
+        true
     });
 
-    if !nostrike {
+    if !skip_each {
         dec_attrs.splice(0..0, strike_attrs.iter().cloned());
     }
+}
+
+fn report_strikethrough_deprecated(ret: &mut TokenStream, span: Span) {
+    // stolen from proc-macro-warning, which depends on syn
+    let q = quote_spanned!(span =>
+        #[allow(dead_code)]
+        #[allow(non_camel_case_types)]
+        #[allow(non_snake_case)]
+        fn strikethrough_used() {
+            #[deprecated(note = "The strikethrough attribute is depcrecated. Use structstruck::each instead.")]
+            #[allow(non_upper_case_globals)]
+            const _w: () = ();
+            let _ = _w;
+        }
+    );
+    q.to_tokens(ret);
 }
 
 fn get_tt_punct<'t>(t: &'t TypeTree<'t>, c: char) -> Option<&'t Punct> {
@@ -344,12 +498,21 @@ fn recurse_through_type_list(
     name_hint: &Option<Ident>,
     pub_hint: bool,
     type_ret: &mut Vec<TokenTree>,
+    path: &NameHints,
 ) {
     let mut tok = tok;
     loop {
         let end = tok.iter().position(|t| get_tt_punct(t, ',').is_some());
         let current = &tok[..end.unwrap_or(tok.len())];
-        recurse_through_type(current, strike_attrs, ret, name_hint, pub_hint, type_ret);
+        recurse_through_type(
+            current,
+            strike_attrs,
+            ret,
+            name_hint,
+            pub_hint,
+            type_ret,
+            path,
+        );
         if let Some(comma) = end {
             type_ret.push(match tok[comma] {
                 TypeTree::Token(comma) => comma.clone(),
@@ -368,6 +531,7 @@ fn recurse_through_type(
     name_hint: &Option<Ident>,
     pub_hint: bool,
     type_ret: &mut Vec<TokenTree>,
+    path: &NameHints,
 ) {
     if let Some(c) = tok.windows(3).find_map(|t| {
         get_tt_punct(&t[0], ':')
@@ -444,7 +608,7 @@ fn recurse_through_type(
         }
     } else {
         un_type_tree(tok, type_ret, |g, type_ret| {
-            recurse_through_type_list(g, strike_attrs, ret, name_hint, false, type_ret)
+            recurse_through_type_list(g, strike_attrs, ret, name_hint, false, type_ret, path)
         });
     }
 }

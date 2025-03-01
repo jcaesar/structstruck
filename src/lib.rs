@@ -175,13 +175,13 @@
 //! }
 //! ```
 //!
-//! To quickly apply attributes to all declarations, attributes can be wrapped in the `#[strikethrough[…]]`
+//! To quickly apply attributes to all declarations, attributes can be wrapped in the `#[structstruck::each[…]]`
 //! pseudoattribute.
 //! ```no_run
 //! structstruck::strike! {
-//!     // It's strikethrough[…], not strikethrough(…)
+//!     // It's structstruck::each[…], not structstruck::each(…)
 //!     // This appears to confuse even the rustdoc syntax highlighter
-//!     #[strikethrough[derive(Debug)]]
+//!     #[structstruck::each[derive(Debug)]]
 //!     struct Parent {
 //!         a: Option<struct {
 //!             c: u32,
@@ -199,12 +199,45 @@
 //! println!("{:#?}", Parent { ..todo!("value skipped for brevity") });
 //! ```
 //!
+//! #### Avoiding name collisions
+//! If you want include the parent struct name (or parent enum name and variant name)
+//! in the name of the child struct, add `#[structstruck::long_names]` to the struct.
+//! ```no_run
+//! structstruck::strike! {
+//!     #[structstruck::long_names]
+//!     struct Outer {
+//!         inner: struct { value: usize }
+//!     }
+//! }
+//! ```
+//! This will generate the following declarations:
+//! ```no_run
+//! struct OuterInner {
+//!   value: usize
+//! }
+//! struct Outer {
+//!    inner: OuterInner,
+//! }
+//! ```
+//! This can be combined with `structstruck::each` to use the full path of all ancestor struct names.
+//! ```no_run
+//! structstruck::strike! {
+//!     #[structstruck::each[structstruck::long_names]]
+//!     struct A {
+//!         b: struct {
+//!             c: struct { }
+//!         }
+//!     }
+//! }
+//! ```
+//! will generate three structs, named `A`, `AB`, and `ABC`.
+//!
+//! This is useful to prevent collisions when using the same field name multiple times or a type with the same name as a field exists.
+//!
 //! ### Missing features, limitations
-//!  * You can't exclude subtrees from `#[strikethrough[…]]`.
+//!  * You can't exclude subtrees from `#[structstruck::each[…]]`.
 //!  * Generic parameter constraints need to be repeated for each struct.
 //!  * Usage error handling is minimal, e.g.:
-//!  * No protection against using the name of a field twice as the name of a struct,  
-//!    e.g. with `foo: Result<struct {…}, struct {…}>,`
 //!  * All substructs will be linearized directly next to the parent struct - without any namespacing or modules.  
 //!    Would be interesting to support `foo: struct foo::Foo {…}` or some automatic version of that.
 //!  * rustfmt really doesn't play along.
