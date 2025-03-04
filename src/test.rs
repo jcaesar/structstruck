@@ -1070,4 +1070,27 @@ fn skip_reset() {
         }
     };
     check(from, out);
+
+    let from = quote!{
+        #[structstruck::each[OnAllMinusC]]
+        struct A {
+            b: struct B {
+                c:
+                #[structstruck::skip_each]
+                struct C {}
+            }
+        }
+    };
+    let out = quote!{
+        struct C {}
+        #[OnAllMinusC]
+        struct B {
+            c: C,
+        }
+        #[OnAllMinusC]
+        struct A {
+            b: B,
+        }
+    };
+    check(from, out);
 }
