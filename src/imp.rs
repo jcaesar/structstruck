@@ -96,6 +96,24 @@ impl<'a> NameHints<'a> {
     }
 }
 
+fn check_crate_attr_no_params(attr: &Attribute, name: &str, ret: &mut TokenStream) -> bool {
+    if check_crate_attr(attr, name) {
+        match attr.value {
+            AttributeValue::Empty => {}
+            _ => {
+                report_error(
+                    stream_span(attr.get_value_tokens().iter()),
+                    ret,
+                    &format!("#[{}] does not take parameters", name),
+                );
+            }
+        }
+        true
+    } else {
+        false
+    }
+}
+
 fn check_crate_attr(attr: &Attribute, attr_name: &str) -> bool {
     use TokenTree::{Ident, Punct};
     matches!(
@@ -408,6 +426,22 @@ fn strike_through_attributes(
     ret: &mut TokenStream,
 ) {
     dec_attrs.retain(|attr| {
+        if check_crate_attr_no_params(attr, "clear_each", ret) {
+            // future feature idea: clear/skip only some attributes
+            strike_attrs.clear();
+            return false;
+        }
+        true
+    });
+    let mut skip_each = false;
+    dec_attrs.retain(|attr| {
+        if check_crate_attr_no_params(attr, "skip_each", ret) {
+            skip_each |= true;
+            return false;
+        }
+        true
+    });
+    dec_attrs.retain(|attr| {
         let each = check_crate_attr(attr, "each");
         let strikethrough =
             matches!(&attr.path[..], [TokenTree::Ident(kw)] if kw == "strikethrough");
@@ -434,13 +468,14 @@ fn strike_through_attributes(
                     );
                 }
             };
-            false
-        } else {
-            true
+            return false;
         }
+        true
     });
 
-    dec_attrs.splice(0..0, strike_attrs.iter().cloned());
+    if !skip_each {
+        dec_attrs.splice(0..0, strike_attrs.iter().cloned());
+    }
 }
 
 fn report_strikethrough_deprecated(ret: &mut TokenStream, span: Span) {

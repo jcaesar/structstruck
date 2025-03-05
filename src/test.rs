@@ -1043,3 +1043,58 @@ fn strikethrough_deprecated() {
     assert!(out.contains("deprecated"));
     assert!(out.contains("structstruck::each"));
 }
+
+#[test]
+fn skip_reset() {
+    let from = quote! {
+        struct A {
+            #![structstruck::each[E1]]
+            b: struct {
+                #![structstruck::each[E2]]
+                #![structstruck::clear_each]
+                #![structstruck::each[E3]]
+                #![structstruck::skip_each]
+                c: struct C {}
+            }
+        }
+    };
+    let out = quote! {
+        #[E2]
+        #[E3]
+        struct C {}
+        struct B {
+            c: C
+        }
+        #[E1]
+        struct A {
+            b: B
+        }
+    };
+    check(from, out);
+}
+
+#[test]
+fn skip() {
+    let from = quote! {
+        #[structstruck::each[OnAllMinusC]]
+        struct A {
+            b: struct B {
+                c:
+                #[structstruck::skip_each]
+                struct C {}
+            }
+        }
+    };
+    let out = quote! {
+        struct C {}
+        #[OnAllMinusC]
+        struct B {
+            c: C,
+        }
+        #[OnAllMinusC]
+        struct A {
+            b: B,
+        }
+    };
+    check(from, out);
+}
