@@ -200,25 +200,28 @@
 //! ```
 //!
 //! The behavior of `each` can be influenced in two ways:
-//!  * `structstruck::exclude_each` will ignore any attributes in `each`.
-//!    The order of attributes does not influence `exclude_each`.
-//!  * `structstruck::clear_each` will reset the set of attributes.
-//!    The order of atttributes matters.
-//!    After using `clear_each`, new attributes can be added.
+//!  * `structstruck::exclude_each` will ignore any attributes in `each` for the current struct only.
+//!  * `structstruck::clear_each` will ignore any `structstruck::each` from parent structs for the current struct and children.
+//!
+//! The order of attributes does not matter.
 //!
 //! For example:
 //! ```no_run
 //! structstruck::strike! {
-//!     #[structstruck::skip_each]
-//!     #[structstruck::each[Attr1]]
-//!     #[structstruck::clear_each]
-//!     #[structstruck::each[Attr2]]
 //!     struct A {
-//!         b: struct {}
+//!         #![structstruck::each[deny(unused)]]
+//!         b: struct {
+//!             #![structstruck::each[allow(unused)]]
+//!             #![structstruck::skip_each]
+//!             #![structstruck::clear_each]
+//!             c: struct {}
+//!         }
 //!     }
 //! }
+//! # const A: Option<A> = None;
+//! # fn foo() { A.unwrap().b; }
 //! ```
-//! will place no attributes on `A` and only `Attr2` on `B`.
+//! will place no attributes on `B` and only `allow(unused)` on `C`.
 //!
 //! #### Avoiding name collisions
 //! If you want include the parent struct name (or parent enum name and variant name)

@@ -1047,8 +1047,8 @@ fn strikethrough_deprecated() {
 #[test]
 fn skip_reset() {
     let from = quote! {
-        #[structstruck::each[E1]]
         struct A {
+            #![structstruck::each[E1]]
             b: struct {
                 #![structstruck::each[E2]]
                 #![structstruck::clear_each]
@@ -1059,6 +1059,7 @@ fn skip_reset() {
         }
     };
     let out = quote! {
+        #[E2]
         #[E3]
         struct C {}
         struct B {
@@ -1070,8 +1071,11 @@ fn skip_reset() {
         }
     };
     check(from, out);
+}
 
-    let from = quote!{
+#[test]
+fn skip() {
+    let from = quote! {
         #[structstruck::each[OnAllMinusC]]
         struct A {
             b: struct B {
@@ -1081,7 +1085,7 @@ fn skip_reset() {
             }
         }
     };
-    let out = quote!{
+    let out = quote! {
         struct C {}
         #[OnAllMinusC]
         struct B {
