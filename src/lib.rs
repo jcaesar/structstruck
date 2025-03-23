@@ -260,9 +260,7 @@
 //!
 //! ### Missing features, limitations
 //!  * Generic parameter constraints need to be repeated for each struct.
-//!  * Usage error handling is minimal, e.g.:
-//!  * All substructs will be linearized directly next to the parent struct - without any namespacing or modules.  
-//!    Would be interesting to support `foo: struct foo::Foo {…}` or some automatic version of that.
+//!  * Usage error handling is minimal.
 //!  * rustfmt really doesn't play along.
 
 mod imp;
