@@ -46,8 +46,8 @@ structstruck::strike! {
 * my original use case: conveniently write kubernetes custom resources with `kube`.
 ```rust
 structstruck::strike! {
-    #[strctstruck::each[derive(Deserialize, Serialize, Clone, Debug, Validate, JsonSchema)]]
-    #[strctstruck::each[serde(rename_all = "camelCase")]]
+    #[structstruck::each[derive(Deserialize, Serialize, Clone, Debug, Validate, JsonSchema)]]
+    #[structstruck::each[serde(rename_all = "camelCase")]]
     #[derive(CustomResource)]
     #[kube(
         group = "kafka.strimzi.io",
