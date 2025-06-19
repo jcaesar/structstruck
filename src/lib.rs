@@ -200,7 +200,7 @@
 //! ```
 //!
 //! The behavior of `each` can be influenced in two ways:
-//!  * `structstruck::exclude_each` will ignore any attributes in `each` for the current struct only.
+//!  * `structstruck::skip_each` will ignore any attributes in `each` for the current struct only.
 //!  * `structstruck::clear_each` will ignore any `structstruck::each` from parent structs for the current struct and children.
 //!
 //! The order of attributes does not matter.
