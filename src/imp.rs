@@ -488,16 +488,13 @@ fn strike_through_attributes(
         true
     });
 
-    let mut pos = 0;
-    let mut each_pos = 0;
-    dec_attrs.retain(|attr| {
-        if check_crate_attr_no_params(attr, "here_each", ret) {
-            each_pos = pos;
-            return false;
-        }
-        pos += 1;
-        true
-    });
+    let each_pos = dec_attrs
+        .iter()
+        .position(|attr| check_crate_attr_no_params(attr, "here_each", ret));
+    if let Some(each_pos) = each_pos {
+        dec_attrs.remove(each_pos);
+    }
+    let each_pos = each_pos.unwrap_or(0);
 
     if !skip_each {
         dec_attrs.splice(each_pos..each_pos, strike_attrs.iter().cloned());

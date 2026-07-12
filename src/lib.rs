@@ -224,8 +224,8 @@
 //! ```
 //! will place no attributes on `B` and only `allow(unused)` on `C`.
 //!
-//! ```no_run
-//! strike!(
+//! ```no_compile
+//! structstruck::strike!(
 //!     #[structstruck::each[B]]
 //!     #[structstruck::each[C]]
 //!
