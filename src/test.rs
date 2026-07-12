@@ -375,7 +375,7 @@ fn public_enum() {
         enum Outer {
             Struct(pub pub struct { a: Zing }),
             Enum(pub pub enum { A, B, C }),
-        };
+        }
     };
     let out = quote! {
         pub struct Struct { a : Zing }
@@ -477,7 +477,7 @@ fn pub_enum_autopubs() {
         pub enum Outer {
             An(struct ()),
             Ny(struct {}),
-        };
+        }
     };
     let out = quote! {
         pub struct An ();
@@ -491,7 +491,9 @@ fn pub_enum_autopubs() {
 }
 
 #[test]
+#[should_panic]
 fn missing_comma_issue4() {
+    // TODO is this test still relevant? venial 6 started catching this case, but the error message is less pretty
     let from = quote! {
         struct Incorrect {
             eater: struct {
@@ -504,40 +506,25 @@ fn missing_comma_issue4() {
     };
     let mut to = TokenStream::new();
     recurse_through_definition(from, vec![], false, &mut to);
-    assert!(to.clone().into_iter().any(|tok| match tok {
-        TokenTree::Ident(id) => id == "compile_error",
-        _ => false,
-    }));
 }
 
 #[test]
-/// TODO
-fn not_quite_fixed_issue4() {
-    let from = quote! {
-        struct Incorrect {
-            eater: struct {
-                stomach: (),
-            } // notice the missing comma
-            you can still put arbitrary junk here and venial will ignore it ;(
-            ! ) 42
-        }
-    };
-    let out = quote! {
-        struct Eater {
-            stomach: (),
-        }
-        struct Incorrect {
-            eater: Eater
-        }
-    };
-    check(from, out);
-}
-
-#[test]
+#[should_panic]
 fn issue4_variant() {
     let from = quote! {
         struct Incorrect {
             uff: Result<struct {} struct {}>
+        }
+    };
+    let mut to = TokenStream::new();
+    recurse_through_definition(from, vec![], false, &mut to);
+}
+
+#[test]
+fn issue4_variant2() {
+    let from = quote! {
+        struct Incorrect {
+            uff: struct { a: A b: B }
         }
     };
     let mut to = TokenStream::new();

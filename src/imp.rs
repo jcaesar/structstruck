@@ -12,13 +12,14 @@ use quote::ToTokens;
 use std::iter::once;
 use std::mem;
 use std::ops::Deref;
-use venial::parse_declaration;
+use venial::parse_item;
 use venial::Attribute;
 use venial::AttributeValue;
-use venial::Declaration;
+use venial::Fields;
 use venial::GenericParam;
 use venial::GenericParamList;
-use venial::StructFields;
+use venial::Item;
+use venial::TypeExpr;
 
 fn stream_span(input: impl Iterator<Item = impl Deref<Target = TokenTree>>) -> Option<Span> {
     let mut ret = None;
@@ -156,7 +157,7 @@ pub(crate) fn recurse_through_definition(
     let span = stream_span(input_vec.iter());
     let input = hack_append_type_decl_semicolon(input_vec);
     let input = move_out_inner_attrs(input);
-    let mut parsed = match parse_declaration(input) {
+    let mut parsed = match parse_item(input) {
         Ok(parsed) => parsed,
         Err(e) => {
             // Sadly, venial still panics on invalid syntax
@@ -165,7 +166,7 @@ pub(crate) fn recurse_through_definition(
         }
     };
     match &mut parsed {
-        Declaration::Struct(s) => {
+        Item::Struct(s) => {
             strike_through_attributes(&mut s.attributes, &mut strike_attrs, ret);
             let name = s.name.to_string();
             let path = &NameHints::from(&name, &mut s.attributes);
@@ -181,7 +182,7 @@ pub(crate) fn recurse_through_definition(
                 s.vis_marker.get_or_insert_with(make_pub_marker);
             }
         }
-        Declaration::Enum(e) => {
+        Item::Enum(e) => {
             strike_through_attributes(&mut e.attributes, &mut strike_attrs, ret);
             let name = e.name.to_string();
             let path = &NameHints::from(&name, &mut e.attributes);
@@ -189,7 +190,7 @@ pub(crate) fn recurse_through_definition(
                 let name = v.name.to_string();
                 let path = &path.with_variant_name(&name);
                 recurse_through_struct_fields(
-                    &mut v.contents,
+                    &mut v.fields,
                     &strike_attrs,
                     ret,
                     is_plain_pub(&e.vis_marker),
@@ -201,7 +202,7 @@ pub(crate) fn recurse_through_definition(
                 e.vis_marker.get_or_insert_with(make_pub_marker);
             }
         }
-        Declaration::Union(u) => {
+        Item::Union(u) => {
             strike_through_attributes(&mut u.attributes, &mut strike_attrs, ret);
             let name = u.name.to_string();
             let path = &NameHints::from(&name, &mut u.attributes);
@@ -210,18 +211,21 @@ pub(crate) fn recurse_through_definition(
                 u.vis_marker.get_or_insert_with(make_pub_marker);
             }
         }
-        Declaration::TyDefinition(t) => {
+        Item::TypeAlias(t) => {
             strike_through_attributes(&mut t.attributes, &mut strike_attrs, ret);
             let name = t.name.to_string();
             let path = &NameHints::from(&name, &mut t.attributes);
-            let ttok = mem::take(&mut t.initializer_ty.tokens);
+            let typei = t
+                .initializer_ty
+                .get_or_insert_with(|| TypeExpr { tokens: vec![] });
+            let ttok = mem::take(&mut typei.tokens);
             recurse_through_type_list(
                 &type_tree(&ttok, ret),
                 &strike_attrs,
                 ret,
                 &None,
                 false,
-                &mut t.initializer_ty.tokens,
+                &mut typei.tokens,
                 path,
             );
             if make_pub {
@@ -237,8 +241,8 @@ pub(crate) fn recurse_through_definition(
             return None;
         }
     }
-    if let Declaration::Struct(s) = &mut parsed {
-        if let StructFields::Tuple(_) = s.fields {
+    if let Item::Struct(s) = &mut parsed {
+        if let Fields::Tuple(_) = s.fields {
             if s.tk_semicolon.is_none() {
                 s.tk_semicolon = Some(Punct::new(';', Spacing::Alone))
             }
@@ -322,7 +326,7 @@ fn move_out_inner_attrs(input: TokenStream) -> TokenStream {
 }
 
 fn recurse_through_struct_fields(
-    fields: &mut venial::StructFields,
+    fields: &mut venial::Fields,
     strike_attrs: &[Attribute],
     ret: &mut TokenStream,
     in_pub_enum: bool,
@@ -330,16 +334,14 @@ fn recurse_through_struct_fields(
     span: Span,
 ) {
     match fields {
-        StructFields::Unit => (),
-        StructFields::Named(n) => named_struct_fields(n, strike_attrs, ret, in_pub_enum, path),
-        StructFields::Tuple(t) => {
-            tuple_struct_fields(t, strike_attrs, ret, in_pub_enum, path, span)
-        }
+        Fields::Unit => (),
+        Fields::Named(n) => named_struct_fields(n, strike_attrs, ret, in_pub_enum, path),
+        Fields::Tuple(t) => tuple_struct_fields(t, strike_attrs, ret, in_pub_enum, path, span),
     }
 }
 
 fn named_struct_fields(
-    n: &mut venial::NamedStructFields,
+    n: &mut venial::NamedFields,
     strike_attrs: &[Attribute],
     ret: &mut TokenStream,
     in_pub_enum: bool,
@@ -370,7 +372,7 @@ fn named_struct_fields(
 }
 
 fn tuple_struct_fields(
-    t: &mut venial::TupleStructFields,
+    t: &mut venial::TupleFields,
     strike_attrs: &[Attribute],
     ret: &mut TokenStream,
     in_pub_enum: bool,
